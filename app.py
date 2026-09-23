@@ -45,6 +45,30 @@ def csrf_check():
     if 'csrf' not in session: session['csrf'] = secrets.token_hex(24)
     if request.method == 'POST' and not secrets.compare_digest(str(request.form.get('csrf', '')), session['csrf']): abort(400, 'Sesi formulir berakhir. Muat ulang halaman.')
 
+@app.template_filter('number_id')
+def number_id(value, column=''):
+    import re
+    from decimal import Decimal, InvalidOperation
+    if value is None: return '—'
+    if isinstance(value, bool): return str(value)
+    # Keep years and identifiers readable, including codes with leading zeros.
+    if re.search(r'(?i)(tahun|year|kode|code|nomor|(^|\s)no($|\s)|telepon|phone|nik|nip|id($|\s))', column): return str(value)
+    raw = str(value).strip()
+    if isinstance(value, str):
+        if re.match(r'^[+-]?0\d', raw): return value
+        if re.fullmatch(r'[+-]?\d+,\d+', raw): raw = raw.replace(',', '.')
+        elif re.fullmatch(r'[+-]?\d{1,3}(?:\.\d{3})+(?:,\d+)?', raw): raw = raw.replace('.', '').replace(',', '.')
+        elif re.fullmatch(r'[+-]?\d{1,3}(?:,\d{3})+(?:\.\d+)?', raw): raw = raw.replace(',', '')
+        elif not re.fullmatch(r'[+-]?\d+(?:\.\d+)?', raw): return value
+    try:
+        number = Decimal(raw)
+        if not number.is_finite(): return str(value)
+        decimals = max(0, -number.as_tuple().exponent)
+        # Decimal values use at least two places; integers stay integers.
+        digits = min(12, max(2, decimals)) if decimals else 0
+        return format(number, f',.{digits}f').translate(str.maketrans({',': '.', '.': ','}))
+    except (InvalidOperation, ValueError): return str(value)
+
 @app.context_processor
 def context(): return dict(is_admin=session.get('admin', False), csrf=session.get('csrf', ''))
 
@@ -171,7 +195,7 @@ def view_table(tid):
         selected = request.args.getlist(key) if key + '_set' in request.args else values
         filtered = [r for r in filtered if ('' if r[idx] is None else str(r[idx])) in selected]
         filters.append(dict(name=col, key=key, values=values, selected=selected))
-    if q: filtered = [r for r in filtered if any(q.casefold() in str(r[i] if r[i] is not None else '').casefold() for i in visible_idx)]
+    if q: filtered = [r for r in filtered if any(q.casefold() in (str(r[i] if r[i] is not None else '') + ' ' + number_id(r[i], t['columns'][i])).casefold() for i in visible_idx)]
     total = len(filtered); pages = max(1, (total+49)//50)
     try: page = max(1, min(pages, int(request.args.get('page', 1))))
     except ValueError: page = 1
