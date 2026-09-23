@@ -110,6 +110,10 @@ def read_upload():
 @app.route('/')
 def root(): return redirect('/home')
 
+@app.get('/kalkulator-pajak')
+def tax_calculator():
+    return render_template('tax.html', page='home')
+
 @app.route('/home')
 @app.route('/admin')
 def home():
