@@ -200,6 +200,32 @@ def view_table(tid):
         filtered = [r for r in filtered if ('' if r[idx] is None else str(r[idx])) in selected]
         filters.append(dict(name=col, key=key, values=values, selected=selected))
     if q: filtered = [r for r in filtered if any(q.casefold() in (str(r[i] if r[i] is not None else '') + ' ' + number_id(r[i], t['columns'][i])).casefold() for i in visible_idx)]
+    sort = request.args.get('sort', '')
+    direction = 'desc' if request.args.get('direction') == 'desc' else 'asc'
+    if sort in t['visible']:
+        from decimal import Decimal, InvalidOperation
+        import re
+        idx = t['columns'].index(sort)
+        def numeric(value):
+            if isinstance(value, bool): raise ValueError()
+            raw = str(value).strip()
+            if isinstance(value, str):
+                if re.fullmatch(r'[+-]?\d{1,3}(?:\.\d{3})+(?:,\d+)?', raw): raw = raw.replace('.', '').replace(',', '.')
+                elif re.fullmatch(r'[+-]?\d+,\d+', raw): raw = raw.replace(',', '.')
+                elif re.fullmatch(r'[+-]?\d{1,3}(?:,\d{3})+(?:\.\d+)?', raw): raw = raw.replace(',', '')
+            number = Decimal(raw)
+            if not number.is_finite(): raise ValueError()
+            return number
+        filled = [row for row in filtered if row[idx] is not None and str(row[idx]).strip()]
+        empty = [row for row in filtered if row[idx] is None or not str(row[idx]).strip()]
+        try:
+            numbers = [numeric(row[idx]) for row in filled]
+            filled = [row for _, row in sorted(zip(numbers, filled), key=lambda pair: pair[0], reverse=direction == 'desc')]
+        except (InvalidOperation, ValueError):
+            filled = sorted(filled, key=lambda row: str(row[idx]).casefold(), reverse=direction == 'desc')
+        filtered = filled + empty
+    else:
+        sort = ''
     total = len(filtered); pages = max(1, (total+49)//50)
     try: page = max(1, min(pages, int(request.args.get('page', 1))))
     except ValueError: page = 1
@@ -208,7 +234,7 @@ def view_table(tid):
         from urllib.parse import urlencode
         return '?' + urlencode(dict(args, page=[n]), doseq=True)
     rows = [[r[i] for i in visible_idx] for r in filtered[(page-1)*50:page*50]]
-    return render_template('table.html', t=t, rows=rows, filters=filters, q=q, total=total, current=page, pages=pages, prev=page_url(page-1), next=page_url(page+1), page='home')
+    return render_template('table.html', t=t, rows=rows, filters=filters, q=q, sort=sort, direction=direction, total=total, current=page, pages=pages, prev=page_url(page-1), next=page_url(page+1), page='home')
 
 @app.get('/admin/download/<tid>')
 @admin_only

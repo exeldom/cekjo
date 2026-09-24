@@ -86,6 +86,13 @@ if (liveForm) {
   liveForm.addEventListener('change', () => schedule(100));
   liveForm.addEventListener('submit', event => { event.preventDefault(); schedule(0); });
   document.addEventListener('click', event => {
+    const header = event.target.closest('[data-sort]');
+    if (header) {
+      liveForm.elements.direction.value = liveForm.elements.sort.value === header.dataset.sort && liveForm.elements.direction.value === 'asc' ? 'desc' : 'asc';
+      liveForm.elements.sort.value = header.dataset.sort;
+      schedule(0);
+      return;
+    }
     const link = event.target.closest('#table-results .pagination a');
     if (!link || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     event.preventDefault(); invalidate(); update(new URL(link.href), revision);
