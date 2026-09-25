@@ -44,3 +44,13 @@ Database dan secret berada di direktori `DATA_DIR`; sertakan keduanya dalam back
 ## Pergantian nama ke cekjo
 
 Nama aplikasi dan judul halaman memakai cekjo. Domain publik menggunakan cekjo.com. File database tetap `data/kosong.sqlite3` untuk mempertahankan data instalasi yang sudah berjalan. Gunakan service dan volume Railway yang sama saat mengganti custom domain; tidak perlu membuat database atau service baru. Tambahkan domain cekjo.com pada service tersebut dan sesuaikan DNS dengan record yang ditampilkan Railway. Perubahan source ini belum mengubah pengaturan domain Railway atau DNS.
+
+## PWA dan akses offline
+
+Buka https://cekjo.com, lalu Pasang. iPhone: Safari → Bagikan → Tambahkan ke Layar Utama. Android: menu Chrome → Instal aplikasi. Logo memakai `static/icons/cekjo-logo.png`.
+
+Setelah sinkron selesai, seluruh tabel yang dapat diakses oleh sesi tersebut disimpan di perangkat, termasuk semua baris untuk pencarian/filter/sort offline. Pengunjung hanya mendapat tabel publik; sesi admin mendapat tabel yang dapat dilihat admin. Kalkulator dan aset aplikasi juga tersedia offline. Semua perubahan (upload, hapus, pengaturan, lock, serta login) memerlukan koneksi. Tidak ada antrean perubahan offline.
+
+Saat online, snapshot diganti otomatis pada pembukaan halaman, kembali ke tab, tersambung kembali, dan setiap dua menit selama tab terlihat. Status di atas navigasi menunjukkan prosesnya. Logout menghapus salinan data lokal. Data yang sudah diunduh tidak bisa ditarik saat perangkat masih offline; perubahan akses/lock diterapkan saat sinkron kembali. Browser dapat menghapus penyimpanan jika perangkat kekurangan ruang.
+
+Tombol Perbarui mengaktifkan versi aplikasi terbaru. Data tabel tidak dimasukkan dalam cache halaman; snapshot terpisah disimpan sesuai hak akses. Jangan membuat ulang service/volume Railway saat deploy.

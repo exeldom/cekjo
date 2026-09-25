@@ -42,6 +42,8 @@ def admin_only(fn):
 
 @app.before_request
 def csrf_check():
+    if request.path in ('/offline', '/offline/kalkulator-pajak', '/sw.js', '/manifest.webmanifest') or request.path.startswith('/static/'):
+        return
     if 'csrf' not in session: session['csrf'] = secrets.token_hex(24)
     if request.method == 'POST' and not secrets.compare_digest(str(request.form.get('csrf', '')), session['csrf']): abort(400, 'Sesi formulir berakhir. Muat ulang halaman.')
 
@@ -106,6 +108,43 @@ def read_upload():
         finally: wb.close()
     except ValueError: raise
     except Exception: raise ValueError('File XLSX tidak dapat dibaca. Simpan ulang melalui Excel.')
+
+# Offline documents contain no authenticated state or table data.
+@app.get('/manifest.webmanifest')
+def pwa_manifest():
+    response = send_file(ROOT / 'static/manifest.webmanifest', mimetype='application/manifest+json')
+    response.headers['Cache-Control'] = 'no-cache'
+    return response
+
+@app.get('/offline')
+def pwa_offline():
+    return render_template('offline.html', page='offline', is_admin=False, csrf='', offline_mode=True)
+
+@app.get('/offline/kalkulator-pajak')
+def pwa_offline_tax():
+    return render_template('tax.html', page='home', is_admin=False, csrf='', offline_mode=True)
+
+@app.get('/sw.js')
+def pwa_worker():
+    import hashlib
+    files = sorted(p for folder in ('static', 'templates') for p in (ROOT / folder).rglob('*') if p.is_file())
+    fingerprint = hashlib.sha256()
+    for path in files:
+        fingerprint.update(str(path.relative_to(ROOT)).encode())
+        fingerprint.update(path.read_bytes())
+    assets = ['/static/' + str(path.relative_to(ROOT / 'static')) for path in files if path.is_relative_to(ROOT / 'static')]
+    assets += ['/offline', '/offline/kalkulator-pajak']
+    response = app.make_response(render_template('sw.js', version=fingerprint.hexdigest()[:16], assets=assets))
+    response.mimetype = 'application/javascript'
+    response.headers['Cache-Control'] = 'no-cache'
+    response.headers['Service-Worker-Allowed'] = '/'
+    return response
+
+@app.after_request
+def private_document_cache(response):
+    if response.mimetype == 'text/html':
+        response.headers['Cache-Control'] = 'no-store'
+    return response
 
 @app.route('/')
 def root(): return redirect('/home')
@@ -254,5 +293,8 @@ def too_large(e): return render_template('error.html', message='File terlalu bes
 def not_found(e): return render_template('error.html', message='Tabel atau halaman tidak tersedia untuk akses ini.'), 404
 @app.errorhandler(400)
 def bad_request(e): return render_template('error.html', message='Permintaan tidak valid. Muat ulang halaman lalu coba lagi.'), 400
+
+from offline_api import register_offline
+register_offline(app, db)
 
 if __name__ == '__main__': app.run(host='127.0.0.1', port=int(os.environ.get('PORT', 5050)))
