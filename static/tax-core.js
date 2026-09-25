@@ -62,5 +62,5 @@
   }
   const api={categories,calculate,round,rupiah,exactText,group,formatAmount};
   if(typeof module!=='undefined' && module.exports) module.exports=api;
-  else root.KosongTax=api;
+  else root.CekjoTax=api;
 })(typeof globalThis!=='undefined'?globalThis:this);

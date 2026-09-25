@@ -1,5 +1,5 @@
 (() => {
-  const {categories,calculate,formatAmount} = KosongTax;
+  const {categories,calculate,formatAmount} = CekjoTax;
   const grid=document.getElementById('tax-grid'), tip=document.getElementById('tax-tooltip');
   let active=null, pinned=false;
   const state = new Map();
