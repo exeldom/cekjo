@@ -176,7 +176,12 @@ def login():
 @app.post('/logout')
 def logout(): session.clear(); return redirect('/home')
 
-@app.route('/admin/settings', methods=['GET', 'POST'])
+@app.get('/admin/settings')
+@admin_only
+def settings_hub():
+    return render_template('settings_hub.html', page='settings')
+
+@app.route('/admin/settings/tables', methods=['GET', 'POST'])
 @admin_only
 def settings():
     if request.method == 'POST':
@@ -201,7 +206,7 @@ def table_settings(tid):
         try:
             with db() as c:
                 if action == 'delete':
-                    c.execute('DELETE FROM tables WHERE id=?', (tid,)); flash('Tabel dihapus.'); return redirect('/admin/settings')
+                    c.execute('DELETE FROM tables WHERE id=?', (tid,)); flash('Tabel dihapus.'); return redirect('/admin/settings/tables')
                 elif action == 'lock': c.execute('UPDATE tables SET locked=? WHERE id=?', (0 if t['locked'] else 1, tid))
                 elif action == 'update':
                     cols, rows = read_upload()

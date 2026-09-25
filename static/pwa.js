@@ -17,11 +17,12 @@
     });
   };
   updateConnection();window.addEventListener('online',updateConnection);window.addEventListener('offline',updateConnection);
-  install.hidden=standalone();
-  matchMedia('(display-mode: standalone)').addEventListener('change',()=>install.hidden=standalone());
-  window.addEventListener('beforeinstallprompt',event=>{event.preventDefault();promptEvent=event;if(!standalone())install.hidden=false;});
-  window.addEventListener('appinstalled',()=>{install.hidden=true;promptEvent=null;help.close();});
-  install.addEventListener('click',async()=>{
+  if(install)install.hidden=false;
+
+  window.addEventListener('beforeinstallprompt',event=>{event.preventDefault();promptEvent=event;});
+  window.addEventListener('appinstalled',()=>{promptEvent=null;help.close();});
+  install?.addEventListener('click',async()=>{
+    if(standalone()){document.getElementById('pwa-help-text').textContent='cekjo sudah dibuka sebagai aplikasi di perangkat ini.';help.showModal();return;}
     if(promptEvent){await promptEvent.prompt();await promptEvent.userChoice;promptEvent=null;}
     else help.showModal();
   });
