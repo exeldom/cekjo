@@ -196,10 +196,18 @@ def register_sharing(app, db, admin_only):
 
     def event(c,t,kind):
         ua=request.headers.get('User-Agent','')[:500]
+        # Approximate analytics metadata only; never used for access control.
+        country=request.headers.get('CF-IPCountry','').upper().strip()
+        if not re.fullmatch(r'[A-Z]{2}',country) or country=='XX': country=None
+        region=request.headers.get('CF-Region','').strip()[:100] if country else None
+        if region:
+            try: region=region.encode('latin-1').decode('utf-8')
+            except (UnicodeEncodeError,UnicodeDecodeError): pass
+            region=''.join(ch for ch in region if ch.isprintable()) or None
         device='Tablet' if re.search(r'iPad|Tablet',ua,re.I) else 'Mobile' if re.search(r'Mobile|iPhone|Android',ua,re.I) else 'Desktop'
         system=next((name for pattern,name in [('iPhone|iPad','iOS'),('Android','Android'),('Windows','Windows'),('Macintosh','macOS'),('Linux','Linux')] if re.search(pattern,ua,re.I)),'Lainnya')
         browser=next((name for pattern,name in [('Edg/','Edge'),('OPR/','Opera'),('Firefox|FxiOS','Firefox'),('Chrome|CriOS','Chrome'),('Safari','Safari')] if re.search(pattern,ua,re.I)),'Lainnya')
-        c.execute('INSERT INTO share_events(share_id,event_type,ip_address,country,region,device,os,browser,user_agent,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)',(t['id'],kind,ip(),None,None,device,system,browser,ua,int(time.time())))
+        c.execute('INSERT INTO share_events(share_id,event_type,ip_address,country,region,device,os,browser,user_agent,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)',(t['id'],kind,ip(),country,region,device,system,browser,ua,int(time.time())))
 
     @app.route('/<token>',methods=['GET','POST','HEAD'])
     def public_share(token):

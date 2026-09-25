@@ -1,4 +1,8 @@
 (() => {
+  if(typeof Intl.DisplayNames==='function'){
+    const names=new Intl.DisplayNames(['id'],{type:'region'});
+    document.querySelectorAll('[data-country]').forEach(e=>{if(e.dataset.country){try{e.textContent=names.of(e.dataset.country)||e.dataset.country;}catch{}}});
+  }
   document.querySelectorAll('[data-ts]').forEach(e=>e.textContent=new Date(Number(e.dataset.ts)*1000).toLocaleString('id-ID'));
   const form=document.getElementById('share-form');if(!form)return;
   const csrf=form.elements.csrf.value,dialog=document.getElementById('share-dialog'),error=document.getElementById('share-error'),save=document.getElementById('share-save');
