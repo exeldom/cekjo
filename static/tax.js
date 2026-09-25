@@ -1,5 +1,5 @@
 (() => {
-  const {categories,calculate,group} = KosongTax;
+  const {categories,calculate,formatAmount} = KosongTax;
   const grid=document.getElementById('tax-grid'), tip=document.getElementById('tax-tooltip');
   let active=null, pinned=false;
   const state = new Map();
@@ -29,30 +29,18 @@
     card.results.forEach((r,i)=>card.outputs[i].textContent=r.display);
     if(active?.dataset.card===card.category.id)showTip(active);
   }
-  function caretAfterDigits(value,count){
-    if(count<=0)return 2;
-    let seen=0;
-    for(let i=0;i<value.length;i++)if(/\d/.test(value[i]) && ++seen===count)return i+1;
-    return value.length;
-  }
   function formatInput(input,card){
-    const cursor=input.selectionStart??input.value.length;
-    const before=(input.value.slice(0,cursor).match(/\d/g)||[]).length;
-    let digits=input.value.replace(/\D/g,'');
-    const oldLength=digits.length;
-    digits=digits.replace(/^0+(?=\d)/,'');
-    const count=Math.max(0,before-(oldLength-digits.length));
-    input.value=digits?'Rp'+group(digits):'';
-    const pos=digits?caretAfterDigits(input.value,count):0;
-    input.setSelectionRange(pos,pos);
-    update(card,digits);
+    const formatted=formatAmount(input.value,input.selectionStart??input.value.length);
+    input.value=formatted.text;
+    input.setSelectionRange(formatted.caret,formatted.caret);
+    update(card,formatted.amount);
   }
   for(const category of categories){
     const card={category,outputs:[],results:[]};state.set(category.id,card);
     const section=element('section','tax-card');
     const heading=element('h2','',category.title); heading.id='title-'+category.id; section.setAttribute('aria-labelledby',heading.id);
     const label=element('label','tax-input-label','Nilai');label.htmlFor='nilai-'+category.id;
-    const input=element('input','tax-input');input.type='text';input.inputMode='numeric';input.autocomplete='off';input.spellcheck=false;input.placeholder='Rp';input.id=label.htmlFor;
+    const input=element('input','tax-input');input.type='text';input.inputMode='decimal';input.autocomplete='off';input.spellcheck=false;input.placeholder='Rp';input.id=label.htmlFor;
     label.append(input);section.append(heading,label);
     const results=element('dl','tax-results');
     calculate(category,'').forEach((row,i)=>{

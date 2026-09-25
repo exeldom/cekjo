@@ -23,9 +23,33 @@
     for(let i=0; i<12 && remainder; i++){remainder*=10n; fraction+=String(remainder/r.d); remainder%=r.d;}
     return rupiah(r.n/r.d)+(fraction ? ','+fraction+(remainder?'…':'') : '');
   };
+  function formatAmount(raw, cursor=raw.length) {
+    const clean = raw.replace(/[^0-9,]/g, '');
+    if (!clean) return {text:'', amount:'', caret:0};
+    const comma = clean.indexOf(',');
+    const originalWhole = comma < 0 ? clean : clean.slice(0,comma);
+    const whole = originalWhole.replace(/^0+(?=\d)/, '') || '0';
+    const fraction = comma < 0 ? '' : clean.slice(comma+1).replace(/,/g,'');
+    const amount = whole + (comma < 0 ? '' : ','+fraction);
+    const text = 'Rp'+group(whole)+(comma < 0 ? '' : ','+fraction);
+    const prefix = raw.slice(0,cursor).replace(/[^0-9,]/g, '');
+    let count;
+    if (comma >= 0 && prefix.includes(',')) {
+      count = whole.length+1+prefix.slice(prefix.indexOf(',')+1).replace(/,/g,'').length;
+    } else {
+      count = Math.max(0,prefix.length-Math.max(0,originalWhole.length-whole.length));
+    }
+    let caret=2, seen=0;
+    for (let i=2; i<text.length && seen<count; i++) {
+      if (/[0-9,]/.test(text[i])) seen++;
+      caret=i+1;
+    }
+    return {text,amount,caret};
+  }
   function calculate(category, digits) {
-    const hasValue = /^\d+$/.test(digits);
-    const value = hasValue ? ratio(digits) : null;
+    const hasValue = /^\d+(?:,\d*)?$/.test(digits);
+    const [whole, fraction=''] = digits.split(',');
+    const value = hasValue ? ratio(whole+fraction, 10n ** BigInt(fraction.length)) : null;
     const dpp = value && (category.mode==='standard' ? multiply(value,100,111) : value);
     const item = (label, fullName, formula, expression, amount, note='') => ({label, fullName, formula, expression, amount, note, display:!hasValue?'—':note||rupiah(round(amount))});
     const valueText = value ? exactText(value) : 'Nilai';
@@ -36,7 +60,7 @@
     if(category.mode==='meal') result.push(item('PBJT','Pajak Barang dan Jasa Tertentu','Nilai × 10%',valueText+' × 10%',value && multiply(value,10,100)));
     return result;
   }
-  const api={categories,calculate,round,rupiah,exactText,group};
+  const api={categories,calculate,round,rupiah,exactText,group,formatAmount};
   if(typeof module!=='undefined' && module.exports) module.exports=api;
   else root.KosongTax=api;
 })(typeof globalThis!=='undefined'?globalThis:this);

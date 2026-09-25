@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% block title %}Kalkulator Pajak Sederhana - PMK 131/2024 dan PP 9/2022 — kosong.id{% endblock %}
 {% block content %}
-<link rel="stylesheet" href="{{ url_for('static', filename='tax.css') }}?v=1">
+<link rel="stylesheet" href="{{ url_for('static', filename='tax.css') }}?v=2">
 <section class="tax-page">
   <a class="button icon-button" href="{{ '/admin' if is_admin else '/home' }}" title="Kembali" aria-label="Kembali">{{ icon('back') }}</a>
   <div class="page-heading"><h1>Kalkulator Pajak Sederhana <span>PMK 131/2024 dan PP 9/2022</span></h1></div>
@@ -9,6 +9,6 @@
   <noscript>Aktifkan JavaScript untuk menggunakan kalkulator.</noscript>
 </section>
 <div id="tax-tooltip" class="tax-tooltip" role="tooltip" hidden></div>
-<script defer src="{{ url_for('static', filename='tax-core.js') }}?v=1"></script>
-<script defer src="{{ url_for('static', filename='tax.js') }}?v=1"></script>
+<script defer src="{{ url_for('static', filename='tax-core.js') }}?v=2"></script>
+<script defer src="{{ url_for('static', filename='tax.js') }}?v=2"></script>
 {% endblock %}
