@@ -11,10 +11,10 @@
     const path=location.pathname;
 
     if(path==='/login'||path.startsWith('/admin/settings')){
-      root.append(el('p','empty','Halaman pengelolaan memerlukan koneksi.'),link('/home','Home'));return;
+      root.append(el('p','empty','Halaman pengelolaan memerlukan koneksi.'));return;
     }
     const tableId=path.startsWith('/table/')?path.split('/')[2]:null;
-    if(tableId){const t=snapshot.tables.find(t=>t.id===tableId);if(!t){root.append(el('p','empty','Tabel tidak tersedia pada perangkat ini.'),link('/home','Home'));return;}renderTable(t);return;}
+    if(tableId){const t=snapshot.tables.find(t=>t.id===tableId);if(!t){root.append(el('p','empty','Tabel tidak tersedia pada perangkat ini.'));return;}renderTable(t);return;}
     const catalog=el('section','minimal-catalog');const identity=el('div','identity'),logo=el('img');logo.src='/static/icons/cekjo-logo.png';logo.alt='';logo.width=64;logo.height=64;identity.append(logo,el('h1','catalog-brand','cekjo'));catalog.append(identity);
     const searchWrap=el('div','search'),search=el('input');search.type='search';search.placeholder='Cari data…';search.setAttribute('aria-label','Cari data');searchWrap.append(search);catalog.append(searchWrap);
     const list=el('div','table-list');const items=[{name:'Kalkulator Pajak Sederhana - PMK 131/2024 dan PP 9/2022',href:'/kalkulator-pajak'},...snapshot.tables.filter(t=>location.pathname!=='/home'||!t.locked).map(t=>({name:t.name,href:'/table/'+t.id}))];
