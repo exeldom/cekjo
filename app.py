@@ -302,4 +302,7 @@ def bad_request(e): return render_template('error.html', message='Permintaan tid
 from offline_api import register_offline
 register_offline(app, db)
 
+from sharing import register_sharing
+register_sharing(app, db, admin_only)
+
 if __name__ == '__main__': app.run(host='127.0.0.1', port=int(os.environ.get('PORT', 5050)))
