@@ -54,3 +54,10 @@ Setelah sinkron selesai, seluruh tabel yang dapat diakses oleh sesi tersebut dis
 Saat online, snapshot diganti otomatis pada pembukaan halaman, kembali ke tab, tersambung kembali, dan setiap dua menit selama tab terlihat. Status di atas navigasi menunjukkan prosesnya. Logout menghapus salinan data lokal. Data yang sudah diunduh tidak bisa ditarik saat perangkat masih offline; perubahan akses/lock diterapkan saat sinkron kembali. Browser dapat menghapus penyimpanan jika perangkat kekurangan ruang.
 
 Tombol Perbarui mengaktifkan versi aplikasi terbaru. Data tabel tidak dimasukkan dalam cache halaman; snapshot terpisah disimpan sesuai hak akses. Jangan membuat ulang service/volume Railway saat deploy.
+
+
+### Aset game R2
+Set Railway `GAME_ASSET_BASE_URL=https://assets.cekjo.com`, lalu deploy.
+Kredensial R2 Railway tetap milik bucket Berbagi Data private. Jangan menggantinya dengan token bucket aset.
+Untuk memperbarui gambar/audio: jalankan `python scripts/upload_game_assets.py` dengan kredensial bucket `cekjo-assets` di lingkungan lokal, baru deploy kode beserta sumber aset. Folder versi lama tetap disimpan untuk rollback. Hapus `GAME_ASSET_BASE_URL` untuk kembali ke aset lokal.
+Preview PDF/XLSX/TXT/DOCX maksimal 10 MB dan hanya berbatas waktu 1–1440 menit. File preview tidak disimpan dalam cache PWA; tanpa tombol download bukan perlindungan anti-salin.

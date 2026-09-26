@@ -19,6 +19,7 @@ with tempfile.TemporaryDirectory() as tmp:
         finally: c.close()
     app = Flask(__name__, template_folder=str(Path(sharing.__file__).parent / 'templates'))
     app.secret_key = 'isolated-check'
+    app.config['SHARE_CLEANUP_ENABLED']=False
     with patch.object(sharing, 'configured', return_value=False):
         sharing.register_sharing(app, db, lambda fn: fn)
     with db() as c:
@@ -41,8 +42,29 @@ with tempfile.TemporaryDirectory() as tmp:
     with patch.object(sharing, 'storage', return_value=fake), patch.dict(sharing.os.environ, {'R2_BUCKET':'check'}):
         assert client.post('/Ab123', data={'passcode':'1234'}).status_code == 303
         assert client.get('/Cd456').status_code == 303
-    assert counts('Ab123') == (1, 'expired', ['Klik link', 'Passcode salah', 'Download'])
-    assert counts('Cd456') == (1, 'expired', ['Klik link', 'Download'])
+    assert counts('Ab123') == (1, 'expired', ['Klik link', 'Passcode salah', 'Akses berhasil'])
+    assert counts('Cd456') == (1, 'expired', ['Klik link', 'Akses berhasil'])
     assert client.get('/Cd456').status_code == 410
-    assert counts('Cd456') == (1, 'expired', ['Klik link', 'Download', 'Klik link'])
-print('PASS: clicks do not change quotas; previews ignored; downloads preserve limits.')
+    assert counts('Cd456') == (1, 'expired', ['Klik link', 'Akses berhasil', 'Klik link'])
+
+    def create(data):
+        response=client.post('/admin/sharing/upload',data=data)
+        assert response.status_code==200,response.json
+        key=response.json['manage_key']
+        with db() as c:token=c.execute('SELECT share_token FROM shares WHERE manage_key=?',(key,)).fetchone()[0]
+        return key,token
+    key,token=create({'kind':'link','title':'Link','url':'https://example.com','mode':'download','downloads':'1'})
+    assert client.get('/'+token).location=='https://example.com'
+    assert client.get('/'+token).status_code==410
+    assert client.post('/admin/sharing/upload',data={'kind':'link','title':'Bad','url':'javascript:alert(1)','mode':'time','minutes':'1'}).status_code==400
+    key,token=create({'kind':'text','title':'Teks','text':'<script>alert(1)</script>','mode':'time','minutes':'1'})
+    response=client.get('/'+token)
+    assert response.status_code==200 and b'&lt;script&gt;' in response.data
+    with db() as c:
+        c.execute("INSERT INTO shares(manage_key,share_token,original_filename,storage_key,file_size,mime_type,expiration_type,duration,expires_at,status,created_at,file_mode) VALUES('preview','Pr123','file.pdf','private',10,'application/pdf','time',60,?,'active',?,'preview')",(int(time.time())+60,int(time.time())))
+    with patch.object(sharing, 'storage', return_value=fake), patch.dict(sharing.os.environ, {'R2_BUCKET':'check'}):
+        for _ in range(3): assert client.get('/Pr123').status_code==200
+    assert counts('Pr123')[:2]==(3,'active')
+    with db() as c:c.execute("UPDATE shares SET expires_at=? WHERE share_token='Pr123'",(int(time.time())-1,))
+    assert client.get('/Pr123').status_code==410
+print('PASS: existing grants, passcode, link/text, time-only preview and expiration.')

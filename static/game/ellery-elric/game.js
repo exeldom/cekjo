@@ -2,10 +2,11 @@
   'use strict';
   const $ = id => document.getElementById(id);
   const ROOT='/static/game/ellery-elric/', PAGE='/game/ellery-elric';
-  const asset = path => ROOT+path+'?v='+ELCI.version;
+  const asset = path => ELCI.media_root+path+(ELCI.media_suffix||'');
+  let game=null;
   let forest=null, paused=false, muted=false, ready=false;
   const held=new Set(), taps=new Set(), pointers=new Map(), keyboard=new Set();
-  const portrait=()=>innerHeight>innerWidth;
+  const portrait=()=>$('game-shell').clientHeight>$('game-shell').clientWidth;
   function clearInput(){held.clear();taps.clear();pointers.clear();keyboard.clear();document.querySelectorAll('.pressed').forEach(e=>e.classList.remove('pressed'));}
   function updateHeld(){held.clear();for(const key of [...pointers.values(),...keyboard])held.add(key);document.querySelectorAll('[data-key]').forEach(b=>b.classList.toggle('pressed',held.has(b.dataset.key)));}
   function freeze(){
@@ -17,7 +18,12 @@
     else {forest.physics.resume();forest.tweens.resumeAll();}
   }
   function pause(value){if(!forest||forest.finished)return;paused=value;$('pause-panel').hidden=!value;freeze();}
-  function orientation(){ $('rotate').hidden=!portrait();freeze(); }
+  function orientation(){
+    const view=window.visualViewport,shell=$('game-shell');
+    shell.style.width=(view?.width||innerWidth)+'px';shell.style.height=(view?.height||innerHeight)+'px';
+    $('rotate').hidden=!portrait();freeze();
+    requestAnimationFrame(()=>game?.scale.refresh());
+  }
   const keyMap={ArrowLeft:'left',KeyA:'left',ArrowRight:'right',KeyD:'right',Space:'jump',ArrowUp:'jump',KeyE:'power',KeyQ:'switch'};
   addEventListener('keydown',e=>{if(e.code==='Escape'){pause(!paused);return;}const k=keyMap[e.code];if(!k||!forest)return;e.preventDefault();if(paused||portrait()||forest.finished)return;if(!e.repeat)taps.add(k);keyboard.add(k);updateHeld();});
   addEventListener('keyup',e=>{const k=keyMap[e.code];if(k){keyboard.delete(k);updateHeld();}});
@@ -30,13 +36,18 @@
   const replay=()=>{paused=false;clearInput();$('pause-panel').hidden=true;$('reward-panel').hidden=true;forest.scene.restart();};
   $('restart').onclick=replay;$('again').onclick=replay;
   addEventListener('resize',orientation);
+  window.visualViewport?.addEventListener('resize',orientation);
+  addEventListener('orientationchange',()=>requestAnimationFrame(orientation));
+  document.addEventListener('fullscreenchange',orientation);
+  addEventListener('pageshow',orientation);
   addEventListener('blur',()=>{clearInput();if(forest&&!forest.finished)pause(true);});
-  document.addEventListener('visibilitychange',()=>{if(document.hidden){clearInput();if(forest&&!forest.finished)pause(true);}});
+  document.addEventListener('visibilitychange',()=>{if(document.hidden){clearInput();if(forest&&!forest.finished)pause(true);}else orientation();});
   orientation();
 
   class Boot extends Phaser.Scene {
     constructor(){super('Boot');}
     preload(){
+      this.load.setCORS('anonymous');
       this.load.on('loaderror',()=>{$('load-message').textContent='Aset belum lengkap. Sambungkan internet, lalu buka kembali game.';this.failed=true;});
       for(const key of ['ellery','elric'])this.load.image(key+'-sheet',asset('assets/'+key+'-sprites.png'));
       this.load.image('props-sheet',asset('assets/props-atlas.png'));
@@ -51,7 +62,7 @@
       $('start').onclick=()=>{
         if(!ready||portrait())return;
         try{this.sound.context?.resume()?.catch(()=>{});}catch{}
-        try{if(this.scale.fullscreen.available)this.scale.startFullscreen();}catch{}
+        try{if(!navigator.standalone&&!matchMedia('(display-mode: standalone)').matches&&this.scale.fullscreen.available)this.scale.startFullscreen();}catch{}
         $('start-panel').hidden=true;this.scene.start('Forest');
       };
     }
@@ -173,7 +184,7 @@
     }
   }
   if(!window.Phaser){$('load-message').textContent='Game belum tersedia. Sambungkan internet lalu buka kembali.';return;}
-  new Phaser.Game({type:Phaser.AUTO,parent:'game',width:1280,height:720,backgroundColor:'#c4dfd3',antialias:true,scale:{mode:Phaser.Scale.FIT,autoCenter:Phaser.Scale.CENTER_BOTH,fullscreenTarget:document.documentElement},physics:{default:'arcade',arcade:{gravity:{y:1100},debug:false}},input:{activePointers:4},scene:[Boot,Forest]});
+  game=new Phaser.Game({type:Phaser.AUTO,parent:'game',width:1280,height:720,backgroundColor:'#c4dfd3',antialias:true,scale:{mode:Phaser.Scale.FIT,autoCenter:Phaser.Scale.CENTER_BOTH,fullscreenTarget:document.getElementById('game-shell')},physics:{default:'arcade',arcade:{gravity:{y:1100},debug:false}},input:{activePointers:4},scene:[Boot,Forest]});
 
   // Complete package first, publish the HTML marker last. Old versions survive failed downloads.
   async function cacheGame(){
@@ -184,7 +195,7 @@
       await navigator.serviceWorker.ready;
       const name='cekjo-game-ellery-elric-'+ELCI.version,cache=await caches.open(name);
       if(await cache.match(PAGE)){registration.active?.postMessage({type:'GAME_CACHE_READY',version:ELCI.version});return;}
-      await cache.addAll(ELCI.assets.map(url=>new Request(url,{credentials:'omit',cache:'reload'})));
+      await cache.addAll(ELCI.assets.map(url=>new Request(url,{credentials:'omit',cache:'reload',mode:'cors'})));
       const response=await fetch(PAGE,{credentials:'omit',cache:'no-store'});
       if(!response.ok)throw new Error('Game page unavailable');
       const html=await response.text();

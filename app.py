@@ -127,14 +127,14 @@ def pwa_offline_tax():
 @app.get('/sw.js')
 def pwa_worker():
     import hashlib
-    files = sorted(p for folder in ('static', 'templates') for p in (ROOT / folder).rglob('*') if p.is_file() and not p.is_relative_to(ROOT / 'static/game'))
-    fingerprint = hashlib.sha256()
+    files = sorted(p for folder in ('static', 'templates') for p in (ROOT / folder).rglob('*') if p.is_file() and not p.is_relative_to(ROOT / 'static/game') and not p.is_relative_to(ROOT / 'static/preview-vendor'))
+    fingerprint = hashlib.sha256(os.environ.get('GAME_ASSET_BASE_URL','').encode())
     for path in files:
         fingerprint.update(str(path.relative_to(ROOT)).encode())
         fingerprint.update(path.read_bytes())
     assets = ['/static/' + str(path.relative_to(ROOT / 'static')) for path in files if path.is_relative_to(ROOT / 'static')]
     assets += ['/offline', '/offline/kalkulator-pajak']
-    response = app.make_response(render_template('sw.js', version=fingerprint.hexdigest()[:16], assets=assets))
+    response = app.make_response(render_template('sw.js', version=fingerprint.hexdigest()[:16], assets=assets, game_asset_base=os.environ.get('GAME_ASSET_BASE_URL','').rstrip('/')))
     response.mimetype = 'application/javascript'
     response.headers['Cache-Control'] = 'no-cache'
     response.headers['Service-Worker-Allowed'] = '/'
@@ -156,22 +156,28 @@ def tax_calculator():
 @lru_cache(maxsize=1)
 def game_package():
     import hashlib
+    from game_media import media_package
     folder = ROOT / 'static/game/ellery-elric'
+    media_version, media_files = media_package(ROOT)
+    base = os.environ.get('GAME_ASSET_BASE_URL', '').rstrip('/')
+    media_root = base + '/games/ellery-elric/' + media_version + '/' if base else '/static/game/ellery-elric/'
     files = sorted(p for p in folder.rglob('*') if p.is_file() and p.suffix != '.svg')
-    digest = hashlib.sha256((ROOT / 'templates/game_ellery_elric.html').read_bytes())
+    digest = hashlib.sha256((ROOT / 'templates/game_ellery_elric.html').read_bytes() + media_root.encode())
     for path in files:
         digest.update(str(path.relative_to(folder)).encode())
         digest.update(path.read_bytes())
     version = digest.hexdigest()[:16]
-    assets = ['/static/' + str(p.relative_to(ROOT / 'static')) + '?v=' + version
+    assets = [(media_root + str(p.relative_to(folder)) if base and p in media_files else
+               '/static/' + str(p.relative_to(ROOT / 'static')) + '?v=' + version)
               for p in files if p.suffix != '.txt']
-    return version, assets
+    return version, assets, media_root
 
 @app.get('/game/ellery-elric')
 def ellery_elric_game():
-    version, assets = game_package()
+    version, assets, media_root = game_package()
     return render_template('game_ellery_elric.html', game_root='/static/game/ellery-elric/',
-                           game_version=version, game_config={'version': version, 'assets': assets})
+                           media_root=media_root, media_suffix='' if media_root.startswith('https://') else '?v='+version, game_version=version,
+                           game_config={'version': version, 'assets': assets, 'media_root': media_root, 'media_suffix': '' if media_root.startswith('https://') else '?v='+version})
 
 @app.route('/home')
 @app.route('/admin')

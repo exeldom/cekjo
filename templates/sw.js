@@ -1,4 +1,5 @@
 const CACHE = 'cekjo-{{ version }}';
+const GAME_MEDIA_BASE = {{ game_asset_base|tojson }};
 const ASSETS = {{ assets|tojson }};
 self.addEventListener('install', event => event.waitUntil((async () => {
   const cache = await caches.open(CACHE);
@@ -22,7 +23,9 @@ self.addEventListener('message', event => {
 });
 self.addEventListener('fetch', event => {
   const request=event.request, url=new URL(request.url);
-  if(request.method !== 'GET' || url.origin !== self.location.origin)return;
+  if(request.method !== 'GET')return;
+  const remoteGame=GAME_MEDIA_BASE && request.url.startsWith(GAME_MEDIA_BASE+'/games/ellery-elric/');
+  if(url.origin !== self.location.origin && !remoteGame)return;
   if(request.mode === 'navigate') {
     event.respondWith((async()=>{
       // Never save live HTML: it may contain private rows, session or admin UI.
@@ -40,7 +43,7 @@ self.addEventListener('fetch', event => {
         return await cache.match(url.pathname === '/kalkulator-pajak' || url.pathname === '/offline/kalkulator-pajak' ? '/offline/kalkulator-pajak' : '/offline');
       } finally {clearTimeout(timer);}
     })());
-  } else if(url.pathname.startsWith('/static/game/ellery-elric/')) {
+  } else if(remoteGame || url.pathname.startsWith('/static/game/ellery-elric/')) {
     event.respondWith((async()=>{
       // Version query is part of the key: never mix two game packages.
       for(const key of (await caches.keys()).filter(k=>k.startsWith('cekjo-game-ellery-elric-'))){
