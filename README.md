@@ -61,3 +61,8 @@ Set Railway `GAME_ASSET_BASE_URL=https://assets.cekjo.com`, lalu deploy.
 Kredensial R2 Railway tetap milik bucket Berbagi Data private. Jangan menggantinya dengan token bucket aset.
 Untuk memperbarui gambar/audio: jalankan `python scripts/upload_game_assets.py` dengan kredensial bucket `cekjo-assets` di lingkungan lokal, baru deploy kode beserta sumber aset. Folder versi lama tetap disimpan untuk rollback. Hapus `GAME_ASSET_BASE_URL` untuk kembali ke aset lokal.
 Preview PDF/XLSX/TXT/DOCX maksimal 10 MB dan hanya berbatas waktu 1–1440 menit. File preview tidak disimpan dalam cache PWA; tanpa tombol download bukan perlindungan anti-salin.
+
+
+### Domain penerima Berbagi Data
+Tambahkan `01001101010001010100111010110100.men` ke service Railway yang sama, lalu isi DNS sesuai petunjuk Railway. Tambahkan `https://01001101010001010100111010110100.men` pada AllowedOrigins CORS GET/HEAD bucket private, tanpa menghapus origin/izin upload existing. Setelah HTTPS aktif, set `SHARE_VIEW_DOMAIN=https://01001101010001010100111010110100.men`. `SHARE_DOMAIN` tetap `https://qoogle.download`.
+Link yang dibagikan tetap memakai domain lama, lalu beralih ke `/view/<kode-acak>` di domain penerima. Alias maksimal 24 jam dan tetap tunduk pada masa berlaku/kuota share. Download menuju R2 dan Link menuju URL tujuan. Kosongkan `SHARE_VIEW_DOMAIN` untuk kembali ke alur lama; alias yang sudah diberikan tetap bekerja sampai kedaluwarsa. Ini menyamarkan link asal, bukan menjamin anonimitas.

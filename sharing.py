@@ -45,6 +45,10 @@ def register_sharing(app, db, admin_only):
           user_agent TEXT, created_at INTEGER NOT NULL);
         CREATE INDEX IF NOT EXISTS share_events_share ON share_events(share_id,created_at);
         CREATE INDEX IF NOT EXISTS shares_cleanup ON shares(status,purge_after,deleted_at);
+        CREATE TABLE IF NOT EXISTS share_aliases (
+          code TEXT PRIMARY KEY, share_id INTEGER NOT NULL, share_token TEXT NOT NULL,
+          expires_at INTEGER NOT NULL);
+        CREATE INDEX IF NOT EXISTS share_aliases_expiry ON share_aliases(expires_at);
         CREATE TABLE IF NOT EXISTS share_rates (key TEXT PRIMARY KEY, count INTEGER NOT NULL, until_at INTEGER NOT NULL);
         ''')
 
@@ -94,6 +98,7 @@ def register_sharing(app, db, admin_only):
         now=int(time.time())
         with db() as c:
             expire(c,now)
+            c.execute('DELETE FROM share_aliases WHERE expires_at<=? OR NOT EXISTS (SELECT 1 FROM shares WHERE shares.id=share_aliases.share_id AND shares.share_token=share_aliases.share_token)',(now,))
             items=c.execute("SELECT * FROM shares WHERE status IN ('expired','deleting','abandoned') AND deleted_at IS NULL AND purge_after<=? LIMIT 30",(now,)).fetchall()
         for item in items:
             try:
@@ -252,6 +257,18 @@ def register_sharing(app, db, admin_only):
 
     @app.route('/<token>',methods=['GET','POST','HEAD'])
     def public_share(token):
+        return serve_share(token)
+
+    @app.route('/view/<code>',methods=['GET','POST','HEAD'])
+    def public_share_view(code):
+        if not re.fullmatch(r'[A-Za-z0-9_-]{32}',code):abort(404)
+        with db() as c:
+            alias=c.execute('SELECT * FROM share_aliases WHERE code=?',(code,)).fetchone()
+        if not alias or alias['expires_at']<=int(time.time()):
+            return render_template('share_public.html',error='Link tidak tersedia atau sudah expired.'),410
+        return serve_share(alias['share_token'],alias)
+
+    def serve_share(token,alias=None):
         if not re.fullmatch(r'[A-Za-z0-9]{5}',token):abort(404)
         if not rate('public:'+ip(),60,60):return render_template('share_public.html',error='Terlalu banyak permintaan. Coba lagi sebentar.'),429,{'Retry-After':'60'}
         ua=request.headers.get('User-Agent','')
@@ -260,10 +277,21 @@ def register_sharing(app, db, admin_only):
         with db() as c:
             expire(c,int(time.time()))
             row=c.execute('SELECT * FROM shares WHERE share_token=?',(token,)).fetchone()
-            if row and request.method=='GET' and row['status'] in ('active','expired'):
+            if row and alias is None and request.method=='GET' and row['status'] in ('active','expired'):
                 event(c,row,'Klik link')
         if not row or row['status']!='active':return render_template('share_public.html',error='Link tidak tersedia atau sudah expired.'),410
+        if alias is not None and row['id']!=alias['share_id']:abort(410)
         t=dict(row)
+        view_domain=os.environ.get('SHARE_VIEW_DOMAIN','').strip().rstrip('/')
+        if alias is None and view_domain:
+            parsed=urlparse(view_domain)
+            if parsed.scheme!='https' or not parsed.hostname or parsed.username or parsed.password or parsed.path or parsed.query or parsed.fragment:
+                return render_template('share_public.html',error='Alamat berbagi belum tersedia.'),503
+            code=secrets.token_urlsafe(24)
+            until=min(int(time.time())+86400,t['expires_at'] or int(time.time())+86400)
+            with db() as c:
+                c.execute('INSERT INTO share_aliases VALUES(?,?,?,?)',(code,t['id'],token,until))
+            return redirect(view_domain+'/view/'+code,code=303)
         action='Buka Preview' if t['file_mode']=='preview' else 'Buka Link' if t['content_kind']=='link' else 'Lihat Teks' if t['content_kind']=='text' else 'Download'
         if t['passcode_hash']:
             if request.method=='GET':return render_template('share_public.html',passcode=True,action=action)
@@ -278,8 +306,9 @@ def register_sharing(app, db, admin_only):
             with db() as c:
                 c.execute('BEGIN IMMEDIATE');expire(c,now)
                 fresh=c.execute('SELECT * FROM shares WHERE id=?',(t['id'],)).fetchone()
-                if not fresh or fresh['status']!='active':return render_template('share_public.html',error='Link sudah expired.'),410
-                remaining=max(1,min(GRANT_SECONDS,(fresh['expires_at']-now) if fresh['expires_at'] else GRANT_SECONDS))
+                if not fresh or fresh['status']!='active' or (alias is not None and alias['expires_at']<=now):return render_template('share_public.html',error='Link sudah expired.'),410
+                view_until=min(fresh['expires_at'] or now+86400,alias['expires_at']) if alias is not None else fresh['expires_at']
+                remaining=max(1,min(GRANT_SECONDS,(view_until-now) if view_until else GRANT_SECONDS))
                 url=None
                 if fresh['content_kind']=='file':
                     ascii_name=secure_filename(t['original_filename']) or 'file'
@@ -291,8 +320,8 @@ def register_sharing(app, db, admin_only):
                 event(c,t,'Akses berhasil')
             if t['content_kind']=='link':return redirect(t['target_url'],code=303)
             if t['content_kind']=='text' or t['file_mode']=='preview':
-                ticket=tickets.dumps({'id':t['id'],'grant_until':now+remaining})
-                config={'kind':t['content_kind'],'extension':t['original_filename'].rsplit('.',1)[-1].lower(),'url':url,'expires_at':t['expires_at'],'server_now':now,'status_url':'/share-view/'+ticket+'/status','size':t['file_size']}
+                ticket=tickets.dumps({'id':t['id'],'grant_until':now+remaining,'view_until':view_until})
+                config={'kind':t['content_kind'],'extension':t['original_filename'].rsplit('.',1)[-1].lower(),'url':url,'expires_at':view_until,'server_now':now,'status_url':'/share-view/'+ticket+'/status','size':t['file_size']}
                 return render_template('share_view.html',title=t['original_filename'],text=t['text_content'] if t['content_kind']=='text' else None,viewer=config)
             return redirect(url,code=303)
         except Exception:return render_template('share_public.html',error='Akses belum tersedia. Coba lagi sebentar.'),503
@@ -307,11 +336,12 @@ def register_sharing(app, db, admin_only):
             row=c.execute('SELECT status,expires_at,content_kind,max_downloads FROM shares WHERE id=?',(data.get('id'),)).fetchone()
         # A quota-limited text grants one viewing; quota exhaustion does not retract it.
         active=bool(row and (row['status']=='active' or (row['status']=='expired' and row['content_kind']=='text' and row['max_downloads'] is not None and now<data.get('grant_until',0))) and (row['expires_at'] is None or row['expires_at']>now))
+        active=active and (not data.get('view_until') or data['view_until']>now)
         return {'active':active,'server_now':now,'expires_at':row['expires_at'] if row else None},200 if active else 410
 
     @app.after_request
     def share_headers(response):
-        if request.endpoint in ('public_share','sharing_view_status') or request.path.startswith('/admin/sharing'):
+        if request.endpoint in ('public_share','public_share_view','sharing_view_status') or request.path.startswith('/admin/sharing'):
             response.headers['Cache-Control']='no-store, private'
             response.headers['Referrer-Policy']='no-referrer'
             response.headers['X-Robots-Tag']='noindex, nofollow, noarchive'

@@ -67,4 +67,33 @@ with tempfile.TemporaryDirectory() as tmp:
     assert counts('Pr123')[:2]==(3,'active')
     with db() as c:c.execute("UPDATE shares SET expires_at=? WHERE share_token='Pr123'",(int(time.time())-1,))
     assert client.get('/Pr123').status_code==410
-print('PASS: existing grants, passcode, link/text, time-only preview and expiration.')
+
+    domain='https://01001101010001010100111010110100.men'
+    with patch.dict(sharing.os.environ, {'SHARE_VIEW_DOMAIN':domain}):
+        key,token=create({'kind':'text','title':'Private','text':'hello','mode':'download-passcode','downloads':'1','passcode':'6789'})
+        response=client.get('/'+token)
+        assert response.status_code==303 and response.location.startswith(domain+'/view/')
+        assert response.headers['Referrer-Policy']=='no-referrer' and 'no-store' in response.headers['Cache-Control']
+        alias=response.location
+        assert counts(token)==(0,'active',['Klik link'])
+        assert client.get(alias).status_code==200
+        assert client.post(alias,data={'passcode':'bad'}).status_code==403
+        assert counts(token)[0]==0
+        assert client.post(alias,data={'passcode':'6789'}).status_code==200
+        assert counts(token)==(1,'expired',['Klik link','Passcode salah','Akses berhasil'])
+        assert client.post(alias,data={'passcode':'6789'}).status_code==410
+        key,token=create({'kind':'link','title':'Target','url':'https://example.com','mode':'time','minutes':'1'})
+        alias=client.get('/'+token).location
+        assert client.get(alias).location=='https://example.com'
+        with db() as c:
+            c.execute('UPDATE share_aliases SET expires_at=? WHERE share_token=?',(int(time.time())-1,token))
+        assert client.get(alias).status_code==410
+        with db() as c:
+            c.execute("UPDATE shares SET expires_at=?,status='active' WHERE share_token='Pr123'",(int(time.time())+60,))
+        alias=client.get('/Pr123').location
+        with patch.object(sharing,'storage',return_value=fake),patch.dict(sharing.os.environ,{'R2_BUCKET':'check'}):
+            assert client.get(alias).status_code==200
+            assert client.get(alias).status_code==200
+        with db() as c:c.execute("UPDATE shares SET expires_at=? WHERE share_token='Pr123'",(int(time.time())-1,))
+        assert client.get(alias).status_code==410
+print('PASS: legacy flow, domain redirect, passcode, single accounting, link, preview and expiry.')
