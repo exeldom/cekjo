@@ -176,9 +176,10 @@ def register_sharing(app, db, admin_only):
         except ValueError: event_page=1
         with db() as c:
             count=c.execute('SELECT COUNT(*) FROM share_events WHERE share_id=?',(t['id'],)).fetchone()[0]
+            clicks=c.execute("SELECT COUNT(*) FROM share_events WHERE share_id=? AND event_type='Klik link'",(t['id'],)).fetchone()[0]
             pages=max(1,(count+49)//50); event_page=min(event_page,pages)
             events=c.execute('SELECT * FROM share_events WHERE share_id=? ORDER BY created_at DESC,id DESC LIMIT 50 OFFSET ?',(t['id'],(event_page-1)*50)).fetchall()
-        return render_template('share_analysis.html',page='settings',t=t,events=events,event_page=event_page,pages=pages)
+        return render_template('share_analysis.html',page='settings',t=t,events=events,event_page=event_page,pages=pages,clicks=clicks)
 
     @app.post('/admin/sharing/<key>/delete')
     @admin_only
@@ -219,6 +220,8 @@ def register_sharing(app, db, admin_only):
         with db() as c:
             expire(c,int(time.time()))
             row=c.execute('SELECT * FROM shares WHERE share_token=?',(token,)).fetchone()
+            if row and request.method=='GET' and row['status'] in ('active','expired'):
+                event(c,row,'Klik link')
         if not row or row['status']!='active':return render_template('share_public.html',error='Link tidak tersedia atau sudah expired.'),410
         t=dict(row)
         if t['passcode_hash']:
