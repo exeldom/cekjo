@@ -1,6 +1,6 @@
 import os, json, sqlite3, secrets, io, zipfile
 from datetime import timedelta, datetime
-from functools import wraps
+from functools import wraps, lru_cache
 from contextlib import contextmanager
 from pathlib import Path
 from flask import Flask, request, session, redirect, render_template, abort, flash, send_file
@@ -42,7 +42,7 @@ def admin_only(fn):
 
 @app.before_request
 def csrf_check():
-    if request.path in ('/offline', '/offline/kalkulator-pajak', '/sw.js', '/manifest.webmanifest') or request.path.startswith('/static/'):
+    if request.path in ('/offline', '/offline/kalkulator-pajak', '/sw.js', '/manifest.webmanifest', '/game/ellery-elric') or request.path.startswith('/static/'):
         return
     if 'csrf' not in session: session['csrf'] = secrets.token_hex(24)
     if request.method == 'POST' and not secrets.compare_digest(str(request.form.get('csrf', '')), session['csrf']): abort(400, 'Sesi formulir berakhir. Muat ulang halaman.')
@@ -127,7 +127,7 @@ def pwa_offline_tax():
 @app.get('/sw.js')
 def pwa_worker():
     import hashlib
-    files = sorted(p for folder in ('static', 'templates') for p in (ROOT / folder).rglob('*') if p.is_file())
+    files = sorted(p for folder in ('static', 'templates') for p in (ROOT / folder).rglob('*') if p.is_file() and not p.is_relative_to(ROOT / 'static/game'))
     fingerprint = hashlib.sha256()
     for path in files:
         fingerprint.update(str(path.relative_to(ROOT)).encode())
@@ -152,6 +152,26 @@ def root(): return redirect('/home')
 @app.get('/kalkulator-pajak')
 def tax_calculator():
     return render_template('tax.html', page='home')
+
+@lru_cache(maxsize=1)
+def game_package():
+    import hashlib
+    folder = ROOT / 'static/game/ellery-elric'
+    files = sorted(p for p in folder.rglob('*') if p.is_file() and p.suffix != '.svg')
+    digest = hashlib.sha256((ROOT / 'templates/game_ellery_elric.html').read_bytes())
+    for path in files:
+        digest.update(str(path.relative_to(folder)).encode())
+        digest.update(path.read_bytes())
+    version = digest.hexdigest()[:16]
+    assets = ['/static/' + str(p.relative_to(ROOT / 'static')) + '?v=' + version
+              for p in files if p.suffix != '.txt']
+    return version, assets
+
+@app.get('/game/ellery-elric')
+def ellery_elric_game():
+    version, assets = game_package()
+    return render_template('game_ellery_elric.html', game_root='/static/game/ellery-elric/',
+                           game_version=version, game_config={'version': version, 'assets': assets})
 
 @app.route('/home')
 @app.route('/admin')

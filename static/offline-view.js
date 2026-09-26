@@ -7,7 +7,8 @@
   function cell(value,col){if(value===null)return '—';if(typeof value==='number'&&!/tahun|year|kode|nomor|telepon|nik|nip|\bid\b/i.test(col))return rupiah.format(value);return String(value);}
   function render(){
     root.replaceChildren();
-    if(!snapshot){root.append(el('p','empty','Belum ada data offline. Sambungkan internet untuk mengunduh data.'));return;}
+    if(location.pathname==='/game/ellery-elric'){root.append(el('p','empty','Buka game saat online terlebih dahulu agar bisa dimainkan offline.'));return;}
+    if(!snapshot && location.pathname.startsWith('/table/')){root.append(el('p','empty','Belum ada data offline. Sambungkan internet untuk mengunduh data.'));return;}
     const path=location.pathname;
 
     if(path==='/login'||path.startsWith('/admin/settings')){
@@ -17,7 +18,7 @@
     if(tableId){const t=snapshot.tables.find(t=>t.id===tableId);if(!t){root.append(el('p','empty','Tabel tidak tersedia pada perangkat ini.'));return;}renderTable(t);return;}
     const catalog=el('section','minimal-catalog');const identity=el('div','identity'),logo=el('img');logo.src='/static/icons/cekjo-logo.png';logo.alt='';logo.width=64;logo.height=64;identity.append(logo,el('h1','catalog-brand','cekjo'));catalog.append(identity);
     const searchWrap=el('div','search'),search=el('input');search.type='search';search.placeholder='Cari data…';search.setAttribute('aria-label','Cari data');searchWrap.append(search);catalog.append(searchWrap);
-    const list=el('div','table-list');const items=[{name:'Kalkulator Pajak Sederhana - PMK 131/2024 dan PP 9/2022',href:'/kalkulator-pajak'},...snapshot.tables.filter(t=>location.pathname!=='/home'||!t.locked).map(t=>({name:t.name,href:'/table/'+t.id}))];
+    const list=el('div','table-list');const items=[{name:'🎮 Ellery & Elric Adventure',href:'/game/ellery-elric'},{name:'Kalkulator Pajak Sederhana - PMK 131/2024 dan PP 9/2022',href:'/kalkulator-pajak'},...(snapshot?.tables||[]).filter(t=>location.pathname!=='/home'||!t.locked).map(t=>({name:t.name,href:'/table/'+t.id}))];
     function filter(){list.replaceChildren();for(const item of items.filter(x=>x.name.toLocaleLowerCase('id').includes(search.value.toLocaleLowerCase('id'))))list.append(link(item.href,item.name,'catalog-row'));}
     search.addEventListener('input',filter);filter();catalog.append(list);root.append(catalog);
   }
