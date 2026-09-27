@@ -11,8 +11,6 @@ LOG = logging.getLogger(__name__)
 GRANT_SECONDS = 60
 UPLOAD_SECONDS = 300
 MAX_FILE = 500 * 1024 * 1024
-MAX_PREVIEW = 10 * 1024 * 1024
-PREVIEW_TYPES = {"pdf", "xlsx", "txt", "docx"}
 
 @lru_cache(maxsize=1)
 def storage():
@@ -63,10 +61,9 @@ def register_sharing(app, db, admin_only):
             if not c.execute('SELECT 1 FROM shares WHERE share_token=?',(token,)).fetchone():return token
         raise ValueError('Token tidak tersedia. Coba lagi.')
 
-    def conditions(file_mode):
+    def conditions():
         mode=request.form.get('mode','')
         if mode not in ('download','time','download-passcode','time-passcode'):raise ValueError('Pilih kondisi berbagi.')
-        if file_mode=='preview' and not mode.startswith('time'):raise ValueError('Preview hanya memakai batas waktu.')
         duration=int(request.form.get('minutes','60'))*60 if mode.startswith('time') else None
         maximum=int(request.form.get('downloads','1')) if mode.startswith('download') else None
         if duration is not None and not 60<=duration<=86400:raise ValueError('Waktu harus 1 menit–24 jam.')
@@ -121,7 +118,7 @@ def register_sharing(app, db, admin_only):
 
     def summary(row):
         t=dict(row);now=int(time.time())
-        t['active']=t['status']=='active'
+        t['active']=t['status']=='active' and t['file_mode']!='preview'
         t['label']='Aktif' if t['active'] else 'Menghapus' if t['status']=='deleting' else 'Expired'
         if t['active'] and t['expiration_type']=='download':t['condition']=f"{t['download_count']} / {t['max_downloads']} akses"
         elif t['active']:t['condition']=f"{max(1,(t['expires_at']-now+59)//60)} menit tersisa"
@@ -150,13 +147,11 @@ def register_sharing(app, db, admin_only):
         try:
             kind=request.form.get('kind','file')
             if kind not in ('file','link','text'):raise ValueError('Pilih File, Link, atau Teks.')
-            file_mode=request.form.get('file_mode','download') if kind=='file' else 'download'
-            if file_mode not in ('download','preview'):raise ValueError('Mode file tidak valid.')
-            duration,maximum,hashed=conditions(file_mode)
+            file_mode='download'
+            if request.form.get('file_mode','download')!='download':raise ValueError('File hanya mendukung download.')
+            duration,maximum,hashed=conditions()
             now=int(time.time());manage=secrets.token_urlsafe(24)
             if kind!='file':
-                title=request.form.get('title','').strip()
-                if not title or len(title)>240:raise ValueError('Isi judul maksimal 240 karakter.')
                 text=request.form.get('text','') if kind=='text' else None
                 url=request.form.get('url','').strip() if kind=='link' else None
                 if kind=='text' and (not text.strip() or len(text)>100000):raise ValueError('Isi teks maksimal 100.000 karakter.')
@@ -166,6 +161,7 @@ def register_sharing(app, db, admin_only):
                         raise ValueError('Isi URL HTTP/HTTPS yang valid.')
                     try: parsed.port
                     except ValueError: raise ValueError('Port URL tidak valid.')
+                title=(url if kind=='link' else ' '.join(text.split()))[:240]
                 with db() as c:
                     c.execute('BEGIN IMMEDIATE');token=new_token(c)
                     c.execute("INSERT INTO shares(owner_id,manage_key,share_token,original_filename,storage_key,file_size,mime_type,expiration_type,duration,max_downloads,passcode_hash,created_at,expires_at,status,content_kind,text_content,target_url) VALUES(1,?,?,?,'',0,'text/plain',?,?,?,?,?,?,'active',?,?,?)",(manage,token,title,'time' if duration else 'download',duration,maximum,hashed,now,now+duration if duration else None,kind,text,url))
@@ -174,10 +170,7 @@ def register_sharing(app, db, admin_only):
             name=request.form.get('filename','').replace('\\','/').split('/')[-1].strip()
             if not name or len(name)>240 or re.search(r'[\x00-\x1f\x7f]',name):raise ValueError('Nama file tidak valid.')
             size=int(request.form.get('size','0'))
-            limit=MAX_PREVIEW if file_mode=='preview' else MAX_FILE
-            if size<1 or size>limit:raise ValueError('Maksimal 10 MB untuk preview, 500 MB untuk download.')
-            extension=name.rsplit('.',1)[-1].lower()
-            if file_mode=='preview' and extension not in PREVIEW_TYPES:raise ValueError('Preview hanya PDF, XLSX, TXT, dan DOCX.')
+            if size<1 or size>MAX_FILE:raise ValueError('Maksimal 500 MB.')
             mime=mimetypes.guess_type(name)[0] or 'application/octet-stream'
             key='shares/'+secrets.token_hex(24)
             url=storage().generate_presigned_url('put_object',Params={'Bucket':os.environ['R2_BUCKET'],'Key':key,'ContentType':mime,'ContentLength':size},ExpiresIn=UPLOAD_SECONDS)
@@ -191,6 +184,7 @@ def register_sharing(app, db, admin_only):
     @admin_only
     def sharing_complete(key):
         t=get_share(key)
+        if t['file_mode']=='preview':return {'error':'Mode preview sudah dihentikan.'},410
         if t['status']=='active':return {'ok':True}
         if t['status']!='uploading':return {'error':'Unggahan sudah berakhir. Unggah kembali.'},410
         try:
@@ -279,7 +273,7 @@ def register_sharing(app, db, admin_only):
             row=c.execute('SELECT * FROM shares WHERE share_token=?',(token,)).fetchone()
             if row and alias is None and request.method=='GET' and row['status'] in ('active','expired'):
                 event(c,row,'Klik link')
-        if not row or row['status']!='active':return render_template('share_public.html',error='Link tidak tersedia atau sudah expired.'),410
+        if not row or row['status']!='active' or row['file_mode']=='preview':return render_template('share_public.html',error='Link tidak tersedia atau sudah expired.'),410
         if alias is not None and row['id']!=alias['share_id']:abort(410)
         t=dict(row)
         view_domain=os.environ.get('SHARE_VIEW_DOMAIN','').strip().rstrip('/')
@@ -292,7 +286,7 @@ def register_sharing(app, db, admin_only):
             with db() as c:
                 c.execute('INSERT INTO share_aliases VALUES(?,?,?,?)',(code,t['id'],token,until))
             return redirect(view_domain+'/view/'+code,code=303)
-        action='Buka Preview' if t['file_mode']=='preview' else 'Buka Link' if t['content_kind']=='link' else 'Lihat Teks' if t['content_kind']=='text' else 'Download'
+        action='Buka Link' if t['content_kind']=='link' else 'Lihat Teks' if t['content_kind']=='text' else 'Download'
         if t['passcode_hash']:
             if request.method=='GET':return render_template('share_public.html',passcode=True,action=action)
             if not rate('pass:'+ip(),15,900) or not rate('token:'+token+':'+ip(),8,900):return render_template('share_public.html',error='Terlalu banyak percobaan. Coba lagi nanti.'),429
@@ -312,17 +306,17 @@ def register_sharing(app, db, admin_only):
                 url=None
                 if fresh['content_kind']=='file':
                     ascii_name=secure_filename(t['original_filename']) or 'file'
-                    disposition=('inline' if fresh['file_mode']=='preview' else 'attachment')+'; filename="'+ascii_name+'"; filename*=UTF-8\'\''+quote(t['original_filename'],safe='')
-                    url=storage().generate_presigned_url('get_object',Params={'Bucket':os.environ['R2_BUCKET'],'Key':t['storage_key'],'ResponseContentDisposition':disposition,'ResponseContentType':t['mime_type'] if fresh['file_mode']=='preview' else 'application/octet-stream','ResponseCacheControl':'no-store, private'},ExpiresIn=remaining)
+                    disposition='attachment'+'; filename="'+ascii_name+'"; filename*=UTF-8\'\''+quote(t['original_filename'],safe='')
+                    url=storage().generate_presigned_url('get_object',Params={'Bucket':os.environ['R2_BUCKET'],'Key':t['storage_key'],'ResponseContentDisposition':disposition,'ResponseContentType':'application/octet-stream','ResponseCacheControl':'no-store, private'},ExpiresIn=remaining)
                 count=fresh['download_count']+1
                 done=fresh['max_downloads'] is not None and count>=fresh['max_downloads']
                 c.execute('UPDATE shares SET download_count=?,last_grant_until=?,status=?,expired_at=?,purge_after=? WHERE id=?',(count,now+remaining,'expired' if done else 'active',now if done else None,now+remaining if done else None,t['id']))
                 event(c,t,'Akses berhasil')
             if t['content_kind']=='link':return redirect(t['target_url'],code=303)
-            if t['content_kind']=='text' or t['file_mode']=='preview':
+            if t['content_kind']=='text':
                 ticket=tickets.dumps({'id':t['id'],'grant_until':now+remaining,'view_until':view_until})
-                config={'kind':t['content_kind'],'extension':t['original_filename'].rsplit('.',1)[-1].lower(),'url':url,'expires_at':view_until,'server_now':now,'status_url':'/share-view/'+ticket+'/status','size':t['file_size']}
-                return render_template('share_view.html',title=t['original_filename'],text=t['text_content'] if t['content_kind']=='text' else None,viewer=config)
+                config={'expires_at':view_until,'server_now':now,'status_url':'/share-view/'+ticket+'/status'}
+                return render_template('share_view.html',text=t['text_content'],viewer=config)
             return redirect(url,code=303)
         except Exception:return render_template('share_public.html',error='Akses belum tersedia. Coba lagi sebentar.'),503
 
@@ -335,7 +329,7 @@ def register_sharing(app, db, admin_only):
             expire(c,now)
             row=c.execute('SELECT status,expires_at,content_kind,max_downloads FROM shares WHERE id=?',(data.get('id'),)).fetchone()
         # A quota-limited text grants one viewing; quota exhaustion does not retract it.
-        active=bool(row and (row['status']=='active' or (row['status']=='expired' and row['content_kind']=='text' and row['max_downloads'] is not None and now<data.get('grant_until',0))) and (row['expires_at'] is None or row['expires_at']>now))
+        active=bool(row and row['content_kind']=='text' and (row['status']=='active' or (row['status']=='expired' and row['content_kind']=='text' and row['max_downloads'] is not None and now<data.get('grant_until',0))) and (row['expires_at'] is None or row['expires_at']>now))
         active=active and (not data.get('view_until') or data['view_until']>now)
         return {'active':active,'server_now':now,'expires_at':row['expires_at'] if row else None},200 if active else 410
 

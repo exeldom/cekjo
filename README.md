@@ -56,10 +56,6 @@ Saat online, snapshot diganti otomatis pada pembukaan halaman, kembali ke tab, t
 Tombol Perbarui mengaktifkan versi aplikasi terbaru. Data tabel tidak dimasukkan dalam cache halaman; snapshot terpisah disimpan sesuai hak akses. Jangan membuat ulang service/volume Railway saat deploy.
 
 
-### Preview Berbagi Data
-Preview PDF/XLSX/TXT/DOCX maksimal 10 MB dan hanya berbatas waktu 1–1440 menit. File preview tidak disimpan dalam cache PWA; tanpa tombol download bukan perlindungan anti-salin.
-
-
 ### Domain penerima Berbagi Data
 Tambahkan `01001101010001010100111010110100.men` ke service Railway yang sama, lalu isi DNS sesuai petunjuk Railway. Tambahkan `https://01001101010001010100111010110100.men` pada AllowedOrigins CORS GET/HEAD bucket private, tanpa menghapus origin/izin upload existing. Setelah HTTPS aktif, set `SHARE_VIEW_DOMAIN=https://01001101010001010100111010110100.men`. `SHARE_DOMAIN` tetap `https://qoogle.download`.
 Link yang dibagikan tetap memakai domain lama, lalu beralih ke `/view/<kode-acak>` di domain penerima. Alias maksimal 24 jam dan tetap tunduk pada masa berlaku/kuota share. Download menuju R2 dan Link menuju URL tujuan. Kosongkan `SHARE_VIEW_DOMAIN` untuk kembali ke alur lama; alias yang sudah diberikan tetap bekerja sampai kedaluwarsa. Ini menyamarkan link asal, bukan menjamin anonimitas.

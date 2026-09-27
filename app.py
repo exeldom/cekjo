@@ -127,7 +127,7 @@ def pwa_offline_tax():
 @app.get('/sw.js')
 def pwa_worker():
     import hashlib
-    files = sorted(p for folder in ('static', 'templates') for p in (ROOT / folder).rglob('*') if p.is_file() and not p.is_relative_to(ROOT / 'static/preview-vendor'))
+    files = sorted(p for folder in ('static', 'templates') for p in (ROOT / folder).rglob('*') if p.is_file())
     fingerprint = hashlib.sha256()
     for path in files:
         fingerprint.update(str(path.relative_to(ROOT)).encode())

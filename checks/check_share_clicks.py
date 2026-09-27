@@ -53,24 +53,16 @@ with tempfile.TemporaryDirectory() as tmp:
         key=response.json['manage_key']
         with db() as c:token=c.execute('SELECT share_token FROM shares WHERE manage_key=?',(key,)).fetchone()[0]
         return key,token
-    key,token=create({'kind':'link','title':'Link','url':'https://example.com','mode':'download','downloads':'1'})
+    key,token=create({'kind':'link','url':'https://example.com','mode':'download','downloads':'1'})
     assert client.get('/'+token).location=='https://example.com'
     assert client.get('/'+token).status_code==410
-    assert client.post('/admin/sharing/upload',data={'kind':'link','title':'Bad','url':'javascript:alert(1)','mode':'time','minutes':'1'}).status_code==400
-    key,token=create({'kind':'text','title':'Teks','text':'<script>alert(1)</script>','mode':'time','minutes':'1'})
+    assert client.post('/admin/sharing/upload',data={'kind':'link','url':'javascript:alert(1)','mode':'time','minutes':'1'}).status_code==400
+    key,token=create({'kind':'text','text':'<script>alert(1)</script>','mode':'time','minutes':'1'})
     response=client.get('/'+token)
     assert response.status_code==200 and b'&lt;script&gt;' in response.data
-    with db() as c:
-        c.execute("INSERT INTO shares(manage_key,share_token,original_filename,storage_key,file_size,mime_type,expiration_type,duration,expires_at,status,created_at,file_mode) VALUES('preview','Pr123','file.pdf','private',10,'application/pdf','time',60,?,'active',?,'preview')",(int(time.time())+60,int(time.time())))
-    with patch.object(sharing, 'storage', return_value=fake), patch.dict(sharing.os.environ, {'R2_BUCKET':'check'}):
-        for _ in range(3): assert client.get('/Pr123').status_code==200
-    assert counts('Pr123')[:2]==(3,'active')
-    with db() as c:c.execute("UPDATE shares SET expires_at=? WHERE share_token='Pr123'",(int(time.time())-1,))
-    assert client.get('/Pr123').status_code==410
-
     domain='https://01001101010001010100111010110100.men'
     with patch.dict(sharing.os.environ, {'SHARE_VIEW_DOMAIN':domain}):
-        key,token=create({'kind':'text','title':'Private','text':'hello','mode':'download-passcode','downloads':'1','passcode':'6789'})
+        key,token=create({'kind':'text','text':'hello','mode':'download-passcode','downloads':'1','passcode':'6789'})
         response=client.get('/'+token)
         assert response.status_code==303 and response.location.startswith(domain+'/view/')
         assert response.headers['Referrer-Policy']=='no-referrer' and 'no-store' in response.headers['Cache-Control']
@@ -82,18 +74,10 @@ with tempfile.TemporaryDirectory() as tmp:
         assert client.post(alias,data={'passcode':'6789'}).status_code==200
         assert counts(token)==(1,'expired',['Klik link','Passcode salah','Akses berhasil'])
         assert client.post(alias,data={'passcode':'6789'}).status_code==410
-        key,token=create({'kind':'link','title':'Target','url':'https://example.com','mode':'time','minutes':'1'})
+        key,token=create({'kind':'link','url':'https://example.com','mode':'time','minutes':'1'})
         alias=client.get('/'+token).location
         assert client.get(alias).location=='https://example.com'
         with db() as c:
             c.execute('UPDATE share_aliases SET expires_at=? WHERE share_token=?',(int(time.time())-1,token))
         assert client.get(alias).status_code==410
-        with db() as c:
-            c.execute("UPDATE shares SET expires_at=?,status='active' WHERE share_token='Pr123'",(int(time.time())+60,))
-        alias=client.get('/Pr123').location
-        with patch.object(sharing,'storage',return_value=fake),patch.dict(sharing.os.environ,{'R2_BUCKET':'check'}):
-            assert client.get(alias).status_code==200
-            assert client.get(alias).status_code==200
-        with db() as c:c.execute("UPDATE shares SET expires_at=? WHERE share_token='Pr123'",(int(time.time())-1,))
-        assert client.get(alias).status_code==410
-print('PASS: legacy flow, domain redirect, passcode, single accounting, link, preview and expiry.')
+print('PASS: legacy flow, domain redirect, passcode, single accounting, link and expiry.')

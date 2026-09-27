@@ -11,21 +11,16 @@
   const post=async(url,data)=>{const response=await fetch(url,{method:'POST',body:data,cache:'no-store'});const result=await response.json().catch(()=>({error:'Permintaan gagal. Muat ulang halaman dan coba lagi.'}));if(!response.ok)throw new Error(result.error||'Permintaan gagal.');return result;};
   document.getElementById('share-add').onclick=()=>dialog.showModal();document.getElementById('share-close').onclick=()=>{if(!busy)dialog.close();};dialog.addEventListener('cancel',e=>{if(busy)e.preventDefault();});
   const kind=()=>form.elements.kind.value;
-  const fileMode=document.getElementById('file-mode'),mode=document.getElementById('share-mode');
+  const mode=document.getElementById('share-mode');
   function fields(){
-    const isFile=kind()==='file',preview=isFile&&fileMode.value==='preview',hasKind=Boolean(kind());
-    document.getElementById('file-fields').hidden=!isFile;fileMode.disabled=!isFile;
+    const isFile=kind()==='file',hasKind=Boolean(kind());
+    document.getElementById('file-fields').hidden=!isFile;
     document.getElementById('content-fields').hidden=!hasKind||isFile;
-    form.elements.title.disabled=!hasKind||isFile;
     for(const type of ['link','text']){document.getElementById(type+'-field').hidden=kind()!==type;form.elements[type==='link'?'url':'text'].disabled=kind()!==type;}
     document.getElementById('share-options').hidden=!hasKind;
-    for(const option of mode.options)option.disabled=preview&&option.value.startsWith('download');
-    if(preview&&mode.value.startsWith('download'))mode.value=mode.value.endsWith('passcode')?'time-passcode':'time';
     const timed=mode.value.startsWith('time'),pass=mode.value.endsWith('passcode');
     document.getElementById('time-field').hidden=!timed;document.getElementById('download-field').hidden=timed;
     document.getElementById('passcode-field').hidden=!pass;form.elements.minutes.disabled=!timed;form.elements.downloads.disabled=timed;form.elements.passcode.disabled=!pass;form.elements.passcode.required=pass;
-    document.getElementById('file-limit').textContent=preview?'PDF, XLSX, TXT, DOCX · maksimal 10 MB':'Maksimal 500 MB';
-    document.getElementById('share-file').accept=preview?'.pdf,.xlsx,.txt,.docx':'';
   }
   form.addEventListener('change',()=>{if(!busy){pending=null;fields();}});fields();
   function choose(selected){if(busy||!selected)return;file=selected;pending=null;document.getElementById('share-filename').textContent=file.name;error.textContent='';}
@@ -33,9 +28,8 @@
   const drop=document.getElementById('share-drop');drop.addEventListener('dragover',e=>{e.preventDefault();drop.classList.add('dragging');});drop.addEventListener('dragleave',()=>drop.classList.remove('dragging'));drop.addEventListener('drop',e=>{e.preventDefault();drop.classList.remove('dragging');choose(e.dataTransfer.files[0]);});
   form.addEventListener('submit',async e=>{
     e.preventDefault();if(busy)return;error.textContent='';
-    const isFile=kind()==='file',preview=isFile&&fileMode.value==='preview';
-    if(isFile&&(!file||file.size<1||file.size>(preview?10:500)*1024*1024)){error.textContent=preview?'Pilih file maksimal 10 MB.':'Pilih file maksimal 500 MB.';return;}
-    if(preview&&!/\.(pdf|xlsx|txt|docx)$/i.test(file.name)){error.textContent='Preview hanya PDF, XLSX, TXT, DOCX.';return;}
+    const isFile=kind()==='file';
+    if(isFile&&(!file||file.size<1||file.size>500*1024*1024)){error.textContent='Pilih file maksimal 500 MB.';return;}
     const data=new FormData(form);if(isFile){data.append('filename',file.name);data.append('size',file.size);}
     busy=true;save.disabled=true;form.querySelector('fieldset').disabled=true;save.textContent=isFile?'Mengunggah…':'Menyimpan…';
     try{
