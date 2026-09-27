@@ -56,10 +56,7 @@ Saat online, snapshot diganti otomatis pada pembukaan halaman, kembali ke tab, t
 Tombol Perbarui mengaktifkan versi aplikasi terbaru. Data tabel tidak dimasukkan dalam cache halaman; snapshot terpisah disimpan sesuai hak akses. Jangan membuat ulang service/volume Railway saat deploy.
 
 
-### Aset game R2
-Set Railway `GAME_ASSET_BASE_URL=https://assets.cekjo.com`, lalu deploy.
-Kredensial R2 Railway tetap milik bucket Berbagi Data private. Jangan menggantinya dengan token bucket aset.
-Untuk memperbarui gambar/audio: jalankan `python scripts/upload_game_assets.py` dengan kredensial bucket `cekjo-assets` di lingkungan lokal, baru deploy kode beserta sumber aset. Folder versi lama tetap disimpan untuk rollback. Hapus `GAME_ASSET_BASE_URL` untuk kembali ke aset lokal.
+### Preview Berbagi Data
 Preview PDF/XLSX/TXT/DOCX maksimal 10 MB dan hanya berbatas waktu 1–1440 menit. File preview tidak disimpan dalam cache PWA; tanpa tombol download bukan perlindungan anti-salin.
 
 

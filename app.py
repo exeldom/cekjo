@@ -1,6 +1,6 @@
 import os, json, sqlite3, secrets, io, zipfile
 from datetime import timedelta, datetime
-from functools import wraps, lru_cache
+from functools import wraps
 from contextlib import contextmanager
 from pathlib import Path
 from flask import Flask, request, session, redirect, render_template, abort, flash, send_file
@@ -42,7 +42,7 @@ def admin_only(fn):
 
 @app.before_request
 def csrf_check():
-    if request.path in ('/offline', '/offline/kalkulator-pajak', '/sw.js', '/manifest.webmanifest', '/game/ellery-elric') or request.path.startswith('/static/'):
+    if request.path in ('/offline', '/offline/kalkulator-pajak', '/sw.js', '/manifest.webmanifest') or request.path.startswith('/static/'):
         return
     if 'csrf' not in session: session['csrf'] = secrets.token_hex(24)
     if request.method == 'POST' and not secrets.compare_digest(str(request.form.get('csrf', '')), session['csrf']): abort(400, 'Sesi formulir berakhir. Muat ulang halaman.')
@@ -127,14 +127,14 @@ def pwa_offline_tax():
 @app.get('/sw.js')
 def pwa_worker():
     import hashlib
-    files = sorted(p for folder in ('static', 'templates') for p in (ROOT / folder).rglob('*') if p.is_file() and not p.is_relative_to(ROOT / 'static/game') and not p.is_relative_to(ROOT / 'static/preview-vendor'))
-    fingerprint = hashlib.sha256(os.environ.get('GAME_ASSET_BASE_URL','').encode())
+    files = sorted(p for folder in ('static', 'templates') for p in (ROOT / folder).rglob('*') if p.is_file() and not p.is_relative_to(ROOT / 'static/preview-vendor'))
+    fingerprint = hashlib.sha256()
     for path in files:
         fingerprint.update(str(path.relative_to(ROOT)).encode())
         fingerprint.update(path.read_bytes())
     assets = ['/static/' + str(path.relative_to(ROOT / 'static')) for path in files if path.is_relative_to(ROOT / 'static')]
     assets += ['/offline', '/offline/kalkulator-pajak']
-    response = app.make_response(render_template('sw.js', version=fingerprint.hexdigest()[:16], assets=assets, game_asset_base=os.environ.get('GAME_ASSET_BASE_URL','').rstrip('/')))
+    response = app.make_response(render_template('sw.js', version=fingerprint.hexdigest()[:16], assets=assets))
     response.mimetype = 'application/javascript'
     response.headers['Cache-Control'] = 'no-cache'
     response.headers['Service-Worker-Allowed'] = '/'
@@ -152,32 +152,6 @@ def root(): return redirect('/home')
 @app.get('/kalkulator-pajak')
 def tax_calculator():
     return render_template('tax.html', page='home')
-
-@lru_cache(maxsize=1)
-def game_package():
-    import hashlib
-    from game_media import media_package
-    folder = ROOT / 'static/game/ellery-elric'
-    media_version, media_files = media_package(ROOT)
-    base = os.environ.get('GAME_ASSET_BASE_URL', '').rstrip('/')
-    media_root = base + '/games/ellery-elric/' + media_version + '/' if base else '/static/game/ellery-elric/'
-    files = sorted(p for p in folder.rglob('*') if p.is_file() and p.suffix != '.svg')
-    digest = hashlib.sha256((ROOT / 'templates/game_ellery_elric.html').read_bytes() + media_root.encode())
-    for path in files:
-        digest.update(str(path.relative_to(folder)).encode())
-        digest.update(path.read_bytes())
-    version = digest.hexdigest()[:16]
-    assets = [(media_root + str(p.relative_to(folder)) if base and p in media_files else
-               '/static/' + str(p.relative_to(ROOT / 'static')) + '?v=' + version)
-              for p in files if p.suffix != '.txt']
-    return version, assets, media_root
-
-@app.get('/game/ellery-elric')
-def ellery_elric_game():
-    version, assets, media_root = game_package()
-    return render_template('game_ellery_elric.html', game_root='/static/game/ellery-elric/',
-                           media_root=media_root, media_suffix='' if media_root.startswith('https://') else '?v='+version, game_version=version,
-                           game_config={'version': version, 'assets': assets, 'media_root': media_root, 'media_suffix': '' if media_root.startswith('https://') else '?v='+version})
 
 @app.route('/home')
 @app.route('/admin')
