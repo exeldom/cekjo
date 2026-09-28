@@ -25,8 +25,8 @@ add(27,[cell('',51),cell([state.government,state.department,state.address].join(
 add(17,[cell(state.documentTitle,189,{size:15,bold:true,align:'center'})],{center:true});
 const detail=(label,value,opts={})=>{const cells=[cell(label,46),cell(':',7,{padding:0}),cell(value,120,opts)];add(Math.max(opts.min||9,Math.max(...cells.map(c=>c.lines.length*c.size*25.4/72*1.18))+3),cells,{inset:8});};
 add(2,[]);detail('Sudah Terima Dari',state.receivedFrom);detail('Untuk Pembayaran',state.payment);detail('Kegiatan',state.activity);add(4,[]);detail('Jumlah Dibayarkan',state.amount?'Rp     '+state.amount:'',{bold:true,italic:true});detail('Terbilang',state.words,{bold:true,italic:true,min:12});
-let used=rows.reduce((sum,row)=>sum+row.height,0);const tooLong=used>164;
-add(Math.max(0,164-used),[]);
+let used=rows.reduce((sum,row)=>sum+row.height,0);const tooLong=used>149;
+add(Math.max(0,149-used),[]);
 const pair=(left,right,height,opts={})=>add(height,[cell(left,86.5,{align:'center',...opts}),cell(right,86.5,{align:'center',...opts})],{inset:8});
 pair(state.treasurerRole,[state.location+(dateText()?', '+dateText():''),'Yang Menerima'].join('\n'),14,{size:10.5});add(18,[]);
 pair(state.treasurer,state.recipient,6,{size:11,bold:true,underline:true});pair(state.treasurerNip?'NIP. '+state.treasurerNip:'',state.recipientNip?'NIP. '+state.recipientNip:'',6,{size:10.5,bold:true});add(8,[]);
