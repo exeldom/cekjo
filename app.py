@@ -147,7 +147,7 @@ def private_document_cache(response):
     return response
 
 @app.route('/')
-def root(): return redirect('/home')
+def root(): return redirect('/admin' if session.get('admin') else '/home')
 
 @app.get('/kalkulator-pajak')
 def tax_calculator():
@@ -240,15 +240,18 @@ def view_table(tid):
     # Public routes never expose hidden columns in the HTML or search results.
     visible_idx = [t['columns'].index(x) for x in t['visible']]
     q = request.args.get('q', '').strip()
-    filtered = t['rows']
+    base = t['rows']
+    if q: base = [r for r in base if any(q.casefold() in (str(r[i] if r[i] is not None else '') + ' ' + number_id(r[i], t['columns'][i])).casefold() for i in visible_idx)]
+    specs = [(col, t['columns'].index(col), 'f' + str(t['columns'].index(col))) for col in t['filters']]
+    selected_by = {idx: set(request.args.getlist(key)) for col, idx, key in specs if key + '_set' in request.args}
+    value = lambda row, idx: '' if row[idx] is None else str(row[idx])
+    filtered = [row for row in base if all(value(row, idx) in chosen for idx, chosen in selected_by.items())]
     filters = []
-    for col in t['filters']:
-        idx = t['columns'].index(col); key = 'f' + str(idx)
-        values = sorted(set('' if r[idx] is None else str(r[idx]) for r in t['rows']))
-        selected = request.args.getlist(key) if key + '_set' in request.args else values
-        filtered = [r for r in filtered if ('' if r[idx] is None else str(r[idx])) in selected]
-        filters.append(dict(name=col, key=key, values=values, selected=selected))
-    if q: filtered = [r for r in filtered if any(q.casefold() in (str(r[i] if r[i] is not None else '') + ' ' + number_id(r[i], t['columns'][i])).casefold() for i in visible_idx)]
+    for col, idx, key in specs:
+        candidates = [row for row in base if all(other == idx or value(row, other) in chosen for other, chosen in selected_by.items())]
+        values = sorted({value(row, idx) for row in candidates})
+        chosen = selected_by.get(idx, set(values))
+        filters.append(dict(name=col, key=key, values=values, selected=sorted(chosen), active=idx in selected_by, unavailable=sorted(chosen-set(values)) if idx in selected_by else [], count=len(chosen.intersection(values))))
     sort = request.args.get('sort', '')
     direction = 'desc' if request.args.get('direction') == 'desc' else 'asc'
     if sort in t['visible']:

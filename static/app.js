@@ -12,11 +12,16 @@ if (search) {
     if (e.key === '/' && !['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) { e.preventDefault(); search.focus(); }
   });
 }
-document.querySelectorAll('[data-check]').forEach(button => button.addEventListener('click', () => {
-  const form = button.closest('form');
-  [...form.elements].filter(el => el.type === 'checkbox' && el.name === button.dataset.check).forEach(el => el.checked = button.dataset.value === 'yes');
-  if (form.id === 'live-filters') form.dispatchEvent(new Event('change', { bubbles: true }));
-}));
+document.addEventListener('click', event => {
+  const button=event.target.closest('[data-check]');if(!button)return;
+  const form=button.closest('form');
+  [...form.elements].filter(el=>el.type==='checkbox'&&el.name===button.dataset.check).forEach(el=>el.checked=button.dataset.value==='yes');
+  if(form.id==='live-filters'){
+    const filter=button.closest('.filter');filter.querySelectorAll('[data-unavailable]').forEach(el=>el.remove());
+    filter.querySelector('input[name$="_set"]').disabled=button.dataset.value==='yes';
+    form.dispatchEvent(new Event('change',{bubbles:true}));
+  }
+});
 document.querySelectorAll('[data-move]').forEach(button => button.addEventListener('click', () => {
   const row = button.closest('tr');
   if (button.dataset.move === 'up' && row.previousElementSibling) row.parentNode.insertBefore(row, row.previousElementSibling);
@@ -49,7 +54,9 @@ if (liveForm) {
   };
   const resultsURL = () => {
     const url = new URL(location.pathname, location.origin);
-    url.search = new URLSearchParams(new FormData(liveForm)).toString();
+    const params=new URLSearchParams(new FormData(liveForm));
+    liveForm.querySelectorAll('input[name$="_set"]:disabled').forEach(el=>params.delete(el.name.slice(0,-4)));
+    url.search=params.toString();
     return url;
   };
   const update = async (url, version) => {
@@ -64,6 +71,14 @@ if (liveForm) {
       if (version !== revision) return;
       const next = html.getElementById('table-results');
       if (!next) throw new Error('Missing results');
+      const menus=html.querySelector('#live-filters .filter-actions');
+      if(!menus)throw new Error('Missing filters');
+      const current=liveForm.querySelector('.filter-actions');
+      const open=[...current.querySelectorAll('details')].map(el=>el.open);
+      const scroll=[...current.querySelectorAll('.filter-options')].map(el=>el.scrollTop);
+      current.replaceWith(menus);
+      menus.querySelectorAll('details').forEach((el,i)=>el.open=open[i]);
+      menus.querySelectorAll('.filter-options').forEach((el,i)=>el.scrollTop=scroll[i]||0);
       panel.replaceWith(next);
       history.replaceState(null, '', url);
     } catch (error) {
@@ -83,7 +98,13 @@ if (liveForm) {
   };
   liveForm.elements.q.addEventListener('input', event => { if (!event.isComposing) schedule(250); });
   liveForm.elements.q.addEventListener('compositionend', () => schedule(250));
-  liveForm.addEventListener('change', () => schedule(100));
+  liveForm.addEventListener('change', event => {
+    if(event.target.matches('input[type="checkbox"]')){
+      const filter=event.target.closest('.filter');
+      filter.querySelector('input[name$="_set"]').disabled=false;
+    }
+    schedule(100);
+  });
   liveForm.addEventListener('submit', event => { event.preventDefault(); schedule(0); });
   document.addEventListener('click', event => {
     const header = event.target.closest('[data-sort]');

@@ -24,14 +24,12 @@
   function renderTable(t){
     root.append(link('/home','←','button icon-button'),el('h1','',t.name));
     const controls=el('div','filterbar panel'),search=el('input');search.type='search';search.placeholder='Cari di dalam tabel…';search.setAttribute('aria-label','Cari data');const box=el('div','search');box.append(search);controls.append(box);
-    const selected=new Map(), filterControls=el('div','filter-actions');
+    const selected=new Map(), filterControls=el('div','filter-actions'),filterViews=[];
     for(const col of t.filters){
-      const index=t.columns.indexOf(col),values=[...new Set(t.rows.map(row=>String(row[index]??'')))].sort((a,b)=>a.localeCompare(b,'id'));
-      const chosen=new Set(values);selected.set(index,chosen);
+      const index=t.columns.indexOf(col);selected.set(index,null);
       const details=el('details','filter'),summary=el('summary','',col),menu=el('div','offline-filter-menu'),tools=el('div','tools'),options=el('div','filter-options');
-      for(const [label,all] of [['Select All',true],['Deselect All',false]]){const b=el('button','',label);b.type='button';b.onclick=()=>{chosen.clear();if(all)values.forEach(v=>chosen.add(v));options.querySelectorAll('input').forEach(x=>x.checked=all);page=1;draw();};tools.append(b);}
-      for(const value of values){const label=el('label'),check=el('input');check.type='checkbox';check.checked=true;check.onchange=()=>{check.checked?chosen.add(value):chosen.delete(value);page=1;draw();};label.append(check,el('span','',value||'(Kosong)'));options.append(label);}
-      menu.append(tools,options);details.append(summary,menu);filterControls.append(details);
+      for(const [label,all] of [['Select All',true],['Deselect All',false]]){const b=el('button','',label);b.type='button';b.onclick=()=>{selected.set(index,all?null:new Set());page=1;draw();};tools.append(b);}
+      menu.append(tools,options);details.append(summary,menu);filterControls.append(details);filterViews.push({index,col,summary,options});
     }
     controls.append(filterControls);root.append(controls);
     const panel=el('section','data-panel'),scroll=el('div','overflow'),table=el('table','data'),head=el('thead'),header=el('tr'),body=el('tbody'),pagination=el('div','pagination');scroll.tabIndex=0;scroll.setAttribute('aria-label','Data tabel, geser ke samping');
@@ -41,7 +39,16 @@
     head.append(header);table.append(head,body);scroll.append(table);panel.append(scroll,pagination);root.append(panel);
     function numeric(v){if(typeof v==='number')return v;const s=String(v).trim();if(!/^[+-]?[\d.,]+$/.test(s))return NaN;return Number(s.includes(',')?s.replaceAll('.','').replace(',','.'):s.replace(/\.(?=\d{3}(?:\.|$))/g,''));}
     function draw(){
-      const q=search.value.toLocaleLowerCase('id');let rows=t.rows.filter(row=>[...selected].every(([i,set])=>set.has(String(row[i]??'')))&&(!q||visible.some(i=>(String(row[i]??'')+' '+cell(row[i],t.columns[i])).toLocaleLowerCase('id').includes(q))));
+      const q=search.value.toLocaleLowerCase('id');
+      const base=t.rows.filter(row=>!q||visible.some(i=>(String(row[i]??'')+' '+cell(row[i],t.columns[i])).toLocaleLowerCase('id').includes(q)));
+      const matches=(row,except)=>[...selected].every(([i,set])=>i===except||set===null||set.has(String(row[i]??'')));
+      let rows=base.filter(row=>matches(row));
+      for(const {index,col,summary,options} of filterViews){
+        const values=[...new Set(base.filter(row=>matches(row,index)).map(row=>String(row[index]??'')))].sort((a,b)=>a.localeCompare(b,'id'));
+        const chosen=selected.get(index),scroll=options.scrollTop;options.replaceChildren();
+        summary.textContent=col+' '+values.filter(v=>chosen===null||chosen.has(v)).length+'/'+values.length;
+        for(const value of values){const label=el('label'),check=el('input');check.type='checkbox';check.checked=chosen===null||chosen.has(value);check.onchange=()=>{const next=selected.get(index)===null?new Set(values):new Set(selected.get(index));check.checked?next.add(value):next.delete(value);selected.set(index,next);page=1;draw();};label.append(check,el('span','',value?cell(value,col):'(Kosong)'));options.append(label);}options.scrollTop=scroll;
+      }
       if(sort>=0){const blank=v=>v===null||String(v).trim()==='';const numericColumn=rows.filter(r=>!blank(r[sort])).every(r=>Number.isFinite(numeric(r[sort])));rows.sort((a,b)=>{const av=a[sort],bv=b[sort];if(blank(av)||blank(bv))return Number(blank(av))-Number(blank(bv));const result=numericColumn?numeric(av)-numeric(bv):String(av).localeCompare(String(bv),'id');return descending?-result:result;});}
       headers.forEach(({th,button,col,index})=>{th.setAttribute('aria-sort',index===sort?(descending?'descending':'ascending'):'none');button.textContent=col+' '+(index===sort?(descending?'↓':'↑'):'↕');});
       const pages=Math.max(1,Math.ceil(rows.length/50));page=Math.min(page,pages);body.replaceChildren();
