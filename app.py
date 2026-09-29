@@ -42,7 +42,7 @@ def admin_only(fn):
 
 @app.before_request
 def csrf_check():
-    if request.path in ('/offline', '/offline/kalkulator-pajak', '/sw.js', '/manifest.webmanifest') or request.path.startswith('/static/'):
+    if request.path in ('/offline', '/offline/kalkulator-pajak', '/sw.js', '/manifest.webmanifest') or request.path.startswith('/static/') or (request.method=='GET' and request.path.startswith('/api/offline-')):
         return
     if 'csrf' not in session: session['csrf'] = secrets.token_hex(24)
     if request.method == 'POST' and not secrets.compare_digest(str(request.form.get('csrf', '')), session['csrf']): abort(400, 'Sesi formulir berakhir. Muat ulang halaman.')
@@ -126,19 +126,15 @@ def pwa_offline_tax():
 
 @app.get('/sw.js')
 def pwa_worker():
-    import hashlib
-    files = sorted(p for folder in ('static', 'templates') for p in (ROOT / folder).rglob('*') if p.is_file() and not p.is_relative_to(ROOT / 'static/receipt/vendor'))
-    fingerprint = hashlib.sha256()
-    for path in files:
-        fingerprint.update(str(path.relative_to(ROOT)).encode())
-        fingerprint.update(path.read_bytes())
-    assets = ['/static/' + str(path.relative_to(ROOT / 'static')) for path in files if path.is_relative_to(ROOT / 'static')]
-    assets += ['/offline', '/offline/kalkulator-pajak']
-    response = app.make_response(render_template('sw.js', version=fingerprint.hexdigest()[:16], assets=assets))
+    from asset_delivery import worker_package, asset_versions, asset_url
+    version, assets, shell = worker_package()
+    response = app.make_response(render_template('sw.js', version=version, assets=assets, shell=shell,
+        all_assets={name:asset_url(name) for name in asset_versions()}))
     response.mimetype = 'application/javascript'
     response.headers['Cache-Control'] = 'no-cache'
     response.headers['Service-Worker-Allowed'] = '/'
-    return response
+    response.set_etag(version)
+    return response.make_conditional(request)
 
 @app.after_request
 def private_document_cache(response):
@@ -159,7 +155,7 @@ def home():
     if request.path == '/admin' and not session.get('admin'): return redirect('/login')
     public = request.path == '/home'
     with db() as c:
-        tables = c.execute('SELECT id,name,locked,updated,json_array_length(rows) AS count FROM tables ' + ('WHERE locked=0 ' if public else '') + 'ORDER BY updated DESC').fetchall()
+        tables = c.execute('SELECT id,name,locked,updated FROM tables ' + ('WHERE locked=0 ' if public else '') + 'ORDER BY updated DESC').fetchall()
     return render_template('home.html', tables=tables, public=public, page='home')
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -312,5 +308,8 @@ register_offline(app, db)
 
 from sharing import register_sharing
 register_sharing(app, db, admin_only)
+
+from asset_delivery import register_assets
+register_assets(app)
 
 if __name__ == '__main__': app.run(host='127.0.0.1', port=int(os.environ.get('PORT', 5050)))

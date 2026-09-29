@@ -1,5 +1,5 @@
 {% extends 'base.html' %}{% block title %}Generate Kwitansi/Invoice OPD — cekjo{% endblock %}{% block content %}
-<link rel="stylesheet" href="/static/receipt/receipt.css?v=4">
+<link rel="stylesheet" href="{{ asset_url('receipt/receipt.css') }}">
 <section class="receipt-app"><div class="receipt-heading"><div><a href="/admin" class="back button icon-button" title="Kembali" aria-label="Kembali">{{ icon("back") }}</a><h1>Generate Kwitansi/Invoice OPD</h1></div></div>
 <div class="receipt-layout"><form id="receipt-form" autocomplete="off">
 <section class="receipt-card"><h2>Pembayaran</h2><label>Untuk Pembayaran<textarea name="payment" rows="3" placeholder="Contoh: Pembayaran Makan dan Minum Rapat Kantor" required></textarea></label><label>Kegiatan<textarea name="activity" rows="2" placeholder="Nama kegiatan" required></textarea></label><label>Jumlah Dibayarkan<div class="receipt-money"><span>Rp</span><input name="amount" inputmode="decimal" placeholder="800.000,25" required></div></label><label>Terbilang<textarea name="words" rows="3" readonly></textarea></label></section>
@@ -8,5 +8,5 @@
 <details class="receipt-card"><summary>Identitas Dokumen</summary><div id="receipt-identity"></div><label>Logo<input id="receipt-logo" type="file" accept="image/png,image/jpeg,image/webp"></label><button id="receipt-default-logo" type="button">Gunakan logo awal</button></details>
 <p id="receipt-notice" role="status"></p><div class="receipt-actions"><button id="receipt-show" type="button">Lihat Kwitansi</button><button id="receipt-download" type="button" class="primary">Download ↓</button></div>
 </form><section class="receipt-preview" aria-label="Preview kwitansi"><div class="receipt-preview-heading"><button id="receipt-hide" type="button" class="icon-button" title="Kembali ke isian" aria-label="Kembali ke isian">{{ icon("back") }}</button></div><div class="receipt-paper-wrap"><div id="receipt-paper"></div></div><p id="receipt-overflow" role="alert"></p></section></div></section>
-<script defer src="/static/receipt/vendor/jspdf.js"></script><script defer src="/static/receipt/vendor/arial.js"></script><script defer src="/static/receipt/receipt.js?v=4"></script>
+<script defer src="{{ asset_url('receipt/vendor/jspdf.js') }}"></script><script defer src="{{ asset_url('receipt/vendor/arial.js') }}"></script><script defer src="{{ asset_url('receipt/receipt.js') }}"></script>
 {% endblock %}
