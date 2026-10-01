@@ -275,19 +275,20 @@ def register_sharing(app, db, admin_only):
             row=c.execute('SELECT * FROM shares WHERE share_token=?',(token,)).fetchone()
             if row and alias is None and request.method=='GET' and row['status'] in ('active','expired'):
                 event(c,row,'Klik link')
-        if not row or row['status']!='active' or row['file_mode']=='preview':return render_template('share_public.html',error='Link tidak tersedia atau sudah expired.'),410
-        if alias is not None and row['id']!=alias['share_id']:abort(410)
-        t=dict(row)
         view_domain=os.environ.get('SHARE_VIEW_DOMAIN','').strip().rstrip('/')
         if alias is None and view_domain:
             parsed=urlparse(view_domain)
             if parsed.scheme!='https' or not parsed.hostname or parsed.username or parsed.password or parsed.path or parsed.query or parsed.fragment:
                 return render_template('share_public.html',error='Alamat berbagi belum tersedia.'),503
             code=secrets.token_urlsafe(24)
-            until=min(int(time.time())+86400,t['expires_at'] or int(time.time())+86400)
-            with db() as c:
-                c.execute('INSERT INTO share_aliases VALUES(?,?,?,?)',(code,t['id'],token,until))
+            if row:
+                until=min(int(time.time())+86400,row['expires_at'] or int(time.time())+86400)
+                with db() as c:
+                    c.execute('INSERT INTO share_aliases VALUES(?,?,?,?)',(code,row['id'],token,until))
             return redirect(view_domain+'/view/'+code,code=303)
+        if not row or row['status']!='active' or row['file_mode']=='preview':return render_template('share_public.html',error='Link tidak tersedia atau sudah expired.'),410
+        if alias is not None and row['id']!=alias['share_id']:abort(410)
+        t=dict(row)
         action='Buka Link' if t['content_kind']=='link' else 'Lihat Teks' if t['content_kind']=='text' else 'Download'
         if t['passcode_hash']:
             if request.method=='GET':return render_template('share_public.html',passcode=True,action=action)
@@ -319,7 +320,7 @@ def register_sharing(app, db, admin_only):
                 ticket=tickets.dumps({'id':t['id'],'grant_until':now+remaining,'view_until':view_until})
                 config={'expires_at':view_until,'server_now':now,'status_url':'/share-view/'+ticket+'/status'}
                 return render_template('share_view.html',text=t['text_content'],viewer=config)
-            return redirect(url,code=303)
+            return render_template('share_public.html',download_url=url)
         except Exception:return render_template('share_public.html',error='Akses belum tersedia. Coba lagi sebentar.'),503
 
     @app.get('/share-view/<ticket>/status')
