@@ -125,10 +125,12 @@ def register_sharing(app, db, admin_only):
         else:t['condition']=''
         return t
 
-    def get_share(key):
+    admin_fields="id,manage_key,content_kind,file_mode,status,created_at,expired_at,expires_at,expiration_type,max_downloads,download_count,duration"
+
+    def get_share(key,metadata_only=False):
         with db() as c:
             expire(c,int(time.time()))
-            row=c.execute('SELECT * FROM shares WHERE manage_key=? AND owner_id=1',(key,)).fetchone()
+            row=c.execute('SELECT '+(admin_fields if metadata_only else '*')+' FROM shares WHERE manage_key=? AND owner_id=1',(key,)).fetchone()
         if not row:abort(404)
         return summary(row)
 
@@ -137,7 +139,7 @@ def register_sharing(app, db, admin_only):
     def sharing_list():
         with db() as c:
             expire(c,int(time.time()))
-            rows=c.execute("SELECT * FROM shares WHERE owner_id=1 AND status NOT IN ('uploading','abandoned') ORDER BY created_at DESC,id DESC").fetchall()
+            rows=c.execute("SELECT "+admin_fields+" FROM shares WHERE owner_id=1 AND status NOT IN ('uploading','abandoned') ORDER BY created_at DESC,id DESC").fetchall()
         return render_template('sharing.html',page='settings',shares=[summary(t) for t in rows],ready=configured())
 
     @app.post('/admin/sharing/upload')
@@ -210,7 +212,7 @@ def register_sharing(app, db, admin_only):
     @app.get('/admin/sharing/<key>/analysis')
     @admin_only
     def sharing_analysis(key):
-        t=get_share(key)
+        t=get_share(key,metadata_only=True)
         try: event_page=max(1,int(request.args.get('page',1)))
         except ValueError: event_page=1
         with db() as c:
