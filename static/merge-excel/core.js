@@ -22,11 +22,7 @@ async function appendExcelSheet(XLSX, workbook, output, first, yieldUI=()=>Promi
     }
     output.rows++;
   }
-  if(first){
-    headers.forEach(append);
-    output.sheet['!merges']=(sheet['!merges']||[]).filter(m=>m.s.r>=5&&m.e.r<=6&&m.e.c<10)
-      .map(m=>({s:{r:m.s.r-5,c:m.s.c},e:{r:m.e.r-5,c:m.e.c}}));
-  }
+  if(first) append(['No.','Tanggal TBP','Nomor TBP','Unit SKPD','Nama Penerima','Keterangan','Jenis TBP','Bruto','Potongan','Neto'].map(v=>({t:'s',v})));
   let added=0;
   for(let row=7;row<=range.e.r;row++){
     const cells=values(row);
@@ -34,6 +30,7 @@ async function appendExcelSheet(XLSX, workbook, output, first, yieldUI=()=>Promi
     if(row%2000===0) await yieldUI();
   }
   output.sheet['!ref']=`A1:J${output.rows}`;
+  output.sheet['!autofilter']={ref:output.sheet['!ref']};
   output.sheet['!cols']=Array.from({length:10},()=>({wch:20}));
   return added;
 }
