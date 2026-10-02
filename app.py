@@ -172,6 +172,11 @@ def login():
 @app.post('/logout')
 def logout(): session.clear(); return redirect('/home')
 
+@app.get('/admin/gabung-excel')
+@admin_only
+def merge_excel():
+    return render_template('merge_excel.html', page='home')
+
 @app.get('/admin/kwitansi')
 @admin_only
 def receipt_generator():
