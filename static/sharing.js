@@ -4,6 +4,16 @@
     document.querySelectorAll('[data-country]').forEach(e=>{if(e.dataset.country){try{e.textContent=names.of(e.dataset.country)||e.dataset.country;}catch{}}});
   }
   document.querySelectorAll('[data-ts]').forEach(e=>e.textContent=new Date(Number(e.dataset.ts)*1000).toLocaleString('id-ID'));
+  const expiringChats=[...document.querySelectorAll('[data-chat-expiry]')];
+  if(expiringChats.length){
+    const expireChats=()=>expiringChats.forEach(row=>{
+      if(Number(row.dataset.chatExpiry)*1000>Date.now())return;
+      row.querySelector('[data-open-chat]')?.remove();
+      row.querySelector('.share-copy').disabled=true;
+      row.querySelector('.share-copy small').textContent='Chat · Expired';
+    });
+    expireChats();setInterval(expireChats,1000);
+  }
   const form=document.getElementById('share-form');if(!form)return;
   const csrf=form.elements.csrf.value,dialog=document.getElementById('share-dialog'),error=document.getElementById('share-error'),save=document.getElementById('share-save');
   let file,pending=null,busy=false;
@@ -18,6 +28,10 @@
     document.getElementById('content-fields').hidden=!hasKind||isFile;
     for(const type of ['link','text']){document.getElementById(type+'-field').hidden=kind()!==type;form.elements[type==='link'?'url':'text'].disabled=kind()!==type;}
     document.getElementById('share-options').hidden=!hasKind;
+    const isChat=kind()==='chat';
+    document.getElementById('chat-fields').hidden=!isChat;
+    for(const option of mode.options)option.disabled=isChat&&option.value.startsWith('download');
+    if(isChat&&mode.value.startsWith('download'))mode.value=mode.value.endsWith('passcode')?'time-passcode':'time';
     const timed=mode.value.startsWith('time'),pass=mode.value.endsWith('passcode');
     document.getElementById('time-field').hidden=!timed;document.getElementById('download-field').hidden=timed;
     document.getElementById('passcode-field').hidden=!pass;form.elements.minutes.disabled=!timed;form.elements.downloads.disabled=timed;form.elements.passcode.disabled=!pass;form.elements.passcode.required=pass;

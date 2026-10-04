@@ -87,6 +87,9 @@ def register_sharing(app, db, admin_only):
             c.execute('INSERT INTO share_rates VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET count=count+1',(key,1,now+window))
         return True
 
+    from chat import TemporaryChat
+    chat=TemporaryChat(app,db,storage,rate)
+
     def expire(c,now):
         c.execute("UPDATE shares SET status='expired',expired_at=COALESCE(expired_at,expires_at,?),purge_after=MAX(COALESCE(expires_at,?),last_grant_until) WHERE status='active' AND ((expires_at IS NOT NULL AND expires_at<=?) OR (max_downloads IS NOT NULL AND download_count>=max_downloads))",(now,now,now))
         c.execute("UPDATE shares SET status='abandoned',purge_after=? WHERE status='uploading' AND created_at<?",(now,now-900))
@@ -97,6 +100,7 @@ def register_sharing(app, db, admin_only):
             expire(c,now)
             c.execute('DELETE FROM share_aliases WHERE expires_at<=? OR NOT EXISTS (SELECT 1 FROM shares WHERE shares.id=share_aliases.share_id AND shares.share_token=share_aliases.share_token)',(now,))
             items=c.execute("SELECT * FROM shares WHERE status IN ('expired','deleting','abandoned') AND deleted_at IS NULL AND purge_after<=? LIMIT 30",(now,)).fetchall()
+        chat.cleanup()
         for item in items:
             try:
                 if item['content_kind']=='file':
@@ -148,10 +152,13 @@ def register_sharing(app, db, admin_only):
         if not rate('upload:'+ip(),20,3600):return {'error':'Terlalu banyak item. Coba lagi nanti.'},429
         try:
             kind=request.form.get('kind','file')
-            if kind not in ('file','link','text'):raise ValueError('Pilih File, Link, atau Teks.')
+            if kind not in ('file','link','text','chat'):raise ValueError('Pilih File, Link, Teks, atau Chat.')
             file_mode='download'
             if request.form.get('file_mode','download')!='download':raise ValueError('File hanya mendukung download.')
             duration,maximum,hashed=conditions()
+            chat_mode=request.form.get('chat_mode','admin')
+            if kind=='chat' and (duration is None or chat_mode not in ('admin','all')):
+                raise ValueError('Chat memerlukan batas waktu 1 menit–24 jam dan pilihan pengirim.')
             now=int(time.time());manage=secrets.token_urlsafe(24)
             if kind!='file':
                 text=request.form.get('text','') if kind=='text' else None
@@ -163,10 +170,11 @@ def register_sharing(app, db, admin_only):
                         raise ValueError('Isi URL HTTP/HTTPS yang valid.')
                     try: parsed.port
                     except ValueError: raise ValueError('Port URL tidak valid.')
-                title=(url if kind=='link' else ' '.join(text.split()))[:240]
+                title=('Chat' if kind=='chat' else url if kind=='link' else ' '.join(text.split()))[:240]
                 with db() as c:
                     c.execute('BEGIN IMMEDIATE');token=new_token(c)
                     c.execute("INSERT INTO shares(owner_id,manage_key,share_token,original_filename,storage_key,file_size,mime_type,expiration_type,duration,max_downloads,passcode_hash,created_at,expires_at,status,content_kind,text_content,target_url) VALUES(1,?,?,?,'',0,'text/plain',?,?,?,?,?,?,'active',?,?,?)",(manage,token,title,'time' if duration else 'download',duration,maximum,hashed,now,now+duration if duration else None,kind,text,url))
+                    if kind=='chat':c.execute('UPDATE shares SET chat_mode=? WHERE manage_key=?',(chat_mode,manage))
                 return {'ok':True,'manage_key':manage,'complete':True}
             if not configured():return {'error':'Konfigurasi R2 belum diisi.'},503
             name=request.form.get('filename','').replace('\\','/').split('/')[-1].strip()
@@ -228,6 +236,9 @@ def register_sharing(app, db, admin_only):
         t=get_share(key);now=int(time.time())
         # Revoke first, before attempting any storage operation.
         with db() as c:c.execute("UPDATE shares SET status='deleting',purge_after=?,expired_at=COALESCE(expired_at,?) WHERE id=?",(now,now,t['id']))
+        if t['content_kind']=='chat':
+            with db() as c:c.execute('DELETE FROM chat_messages WHERE share_id=?',(t['id'],))
+            return {'ok':True}
         try:
             if t['content_kind']=='file' and not t['deleted_at']:storage().delete_object(Bucket=os.environ['R2_BUCKET'],Key=t['storage_key'])
             with db() as c:
@@ -251,8 +262,19 @@ def register_sharing(app, db, admin_only):
         browser=next((name for pattern,name in [('Edg/','Edge'),('OPR/','Opera'),('Firefox|FxiOS','Firefox'),('Chrome|CriOS','Chrome'),('Safari','Safari')] if re.search(pattern,ua,re.I)),'Lainnya')
         c.execute('INSERT INTO share_events(share_id,event_type,ip_address,country,region,device,os,browser,user_agent,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)',(t['id'],kind,ip(),country,region,device,system,browser,ua,int(time.time())))
 
+    @app.route('/admin/sharing/<key>/chat',methods=['GET','POST'])
+    @admin_only
+    def admin_share_chat(key):
+        t=get_share(key)
+        if t['content_kind']!='chat':abort(404)
+        return chat.api(t) if request.args.get('chat') else chat.page(t,admin=True)
+
     @app.route('/<token>',methods=['GET','POST','HEAD'])
     def public_share(token):
+        if request.args.get('chat'):
+            with db() as c:row=c.execute('SELECT * FROM shares WHERE share_token=?',(token,)).fetchone()
+            if not row:return {'error':'Chat sudah expired.'},410
+            return chat.api(row)
         return serve_share(token)
 
     @app.route('/view/<code>',methods=['GET','POST','HEAD'])
@@ -262,6 +284,10 @@ def register_sharing(app, db, admin_only):
             alias=c.execute('SELECT * FROM share_aliases WHERE code=?',(code,)).fetchone()
         if not alias or alias['expires_at']<=int(time.time()):
             return render_template('share_public.html',error='Link tidak tersedia atau sudah expired.'),410
+        if request.args.get('chat'):
+            with db() as c:row=c.execute('SELECT * FROM shares WHERE id=? AND share_token=?',(alias['share_id'],alias['share_token'])).fetchone()
+            if not row:return {'error':'Chat sudah expired.'},410
+            return chat.api(row)
         return serve_share(alias['share_token'],alias)
 
     def serve_share(token,alias=None):
@@ -289,7 +315,7 @@ def register_sharing(app, db, admin_only):
         if not row or row['status']!='active' or row['file_mode']=='preview':return render_template('share_public.html',error='Link tidak tersedia atau sudah expired.'),410
         if alias is not None and row['id']!=alias['share_id']:abort(410)
         t=dict(row)
-        action='Buka Link' if t['content_kind']=='link' else 'Lihat Teks' if t['content_kind']=='text' else 'Download'
+        action='Buka Chat' if t['content_kind']=='chat' else 'Buka Link' if t['content_kind']=='link' else 'Lihat Teks' if t['content_kind']=='text' else 'Download'
         if t['passcode_hash']:
             if request.method=='GET':return render_template('share_public.html',passcode=True,action=action)
             if not rate('pass:'+ip(),15,900) or not rate('token:'+token+':'+ip(),8,900):return render_template('share_public.html',error='Terlalu banyak percobaan. Coba lagi nanti.'),429
@@ -315,6 +341,7 @@ def register_sharing(app, db, admin_only):
                 done=fresh['max_downloads'] is not None and count>=fresh['max_downloads']
                 c.execute('UPDATE shares SET download_count=?,last_grant_until=?,status=?,expired_at=?,purge_after=? WHERE id=?',(count,now+remaining,'expired' if done else 'active',now if done else None,now+remaining if done else None,t['id']))
                 event(c,t,'Akses berhasil')
+            if t['content_kind']=='chat':return chat.page(t)
             if t['content_kind']=='link':return redirect(t['target_url'],code=303)
             if t['content_kind']=='text':
                 ticket=tickets.dumps({'id':t['id'],'grant_until':now+remaining,'view_until':view_until})

@@ -22,7 +22,7 @@ def asset_url(name):
 def worker_package():
     versions=asset_versions()
     # Cache essentials only. Receipt fonts and page-specific extras load on demand.
-    names=[name for name in versions if not name.startswith(('receipt/','merge-excel/')) and name not in ('sharing.js','sharing.css','share-view.js','share-view.css')]
+    names=[name for name in versions if not name.startswith(('receipt/','merge-excel/','chat/')) and name not in ('sharing.js','sharing.css','share-view.js','share-view.css')]
     shell=['/offline','/offline/kalkulator-pajak']
     digest=hashlib.sha256()
     for p in sorted((ROOT/'templates').glob('*')):
