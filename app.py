@@ -314,6 +314,9 @@ register_offline(app, db)
 from sharing import register_sharing
 register_sharing(app, db, admin_only)
 
+from realisasi import register_realisasi
+register_realisasi(app, db, admin_only)
+
 from asset_delivery import register_assets
 register_assets(app)
 

@@ -37,7 +37,7 @@ run.addEventListener('click',async()=>{
     }
     current='';status.textContent=`Menyiapkan ${count.toLocaleString('id-ID')} baris…`;await yieldUI();
     const merged=XLSX.utils.book_new();XLSX.utils.book_append_sheet(merged,output.sheet,'Gabungan');
-    XLSX.writeFile(merged,'gabungan.xlsx',{compression:true});
+    XLSX.writeFile(merged,'gabungan-laporan-realisasi.xlsx',{compression:true});
     status.textContent=`Selesai: ${files.length} file, ${count.toLocaleString('id-ID')} baris data.`;
   }catch(error){status.textContent=(current?`${current}: `:'')+error.message;}
   finally{busy=false;render();}
