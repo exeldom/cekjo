@@ -1,3 +1,16 @@
+function searchFilterOptions(input) {
+  const menu = input.parentElement;
+  const query = input.value.trim().toLocaleLowerCase('id');
+  const labels = [...menu.querySelectorAll('.filter-options label')];
+  labels.forEach(label => { label.hidden = !label.textContent.toLocaleLowerCase('id').includes(query); });
+  menu.querySelector('.filter-no-results').hidden = labels.some(label => !label.hidden);
+}
+document.addEventListener('input', event => {
+  if (event.target.matches('.filter-search')) searchFilterOptions(event.target);
+});
+document.addEventListener('keydown', event => {
+  if (event.key === 'Enter' && event.target.matches('.filter-search')) event.preventDefault();
+});
 const search = document.getElementById('catalog-search');
 if (search) {
   search.addEventListener('input', () => {
@@ -76,8 +89,14 @@ if (liveForm) {
       const current=liveForm.querySelector('.filter-actions');
       const open=[...current.querySelectorAll('details')].map(el=>el.open);
       const scroll=[...current.querySelectorAll('.filter-options')].map(el=>el.scrollTop);
+      const searches=[...current.querySelectorAll('.filter-search')].map(el=>({value:el.value,focused:el===document.activeElement}));
       current.replaceWith(menus);
       menus.querySelectorAll('details').forEach((el,i)=>el.open=open[i]);
+      menus.querySelectorAll('.filter-search').forEach((el,i)=>{
+        el.value=searches[i]?.value||'';
+        searchFilterOptions(el);
+        if(searches[i]?.focused)el.focus({preventScroll:true});
+      });
       menus.querySelectorAll('.filter-options').forEach((el,i)=>el.scrollTop=scroll[i]||0);
       panel.replaceWith(next);
       history.replaceState(null, '', url);
@@ -99,6 +118,7 @@ if (liveForm) {
   liveForm.elements.q.addEventListener('input', event => { if (!event.isComposing) schedule(250); });
   liveForm.elements.q.addEventListener('compositionend', () => schedule(250));
   liveForm.addEventListener('change', event => {
+    if(event.target.matches('.filter-search'))return;
     if(event.target.matches('input[type="checkbox"]')){
       const filter=event.target.closest('.filter');
       filter.querySelector('input[name$="_set"]').disabled=false;

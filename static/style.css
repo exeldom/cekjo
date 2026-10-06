@@ -35,3 +35,5 @@ button,.button,.minimal .icon-button{color:#222}.minimal .primary .icon{color:wh
 @media(prefers-reduced-transparency:reduce){.minimal .bottom,dialog,.filter-menu{background:#fafafa}}
 
 .data .sort-header{padding:0;min-height:30px;border:0;background:none;box-shadow:none;border-radius:4px;color:inherit;font:inherit;display:flex;justify-content:space-between;gap:14px;width:100%;text-align:left}.sort-header span{opacity:.5}th[aria-sort="ascending"] .sort-header,th[aria-sort="descending"] .sort-header{color:#111}.sort-header:hover span{opacity:1}
+
+.filter-search{display:block;width:100%;min-width:0;padding:10px 12px;border:1px solid var(--line);border-radius:9px;background:white;color:var(--ink);font-size:16px}
