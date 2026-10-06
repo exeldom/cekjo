@@ -1,6 +1,6 @@
 """One private, versioned budget and realization snapshot."""
 import gzip,json,re,time
-from decimal import Decimal,InvalidOperation
+from decimal import Decimal,InvalidOperation,ROUND_HALF_UP
 from flask import request,render_template
 PAGU=['KODE BIDANG URUSAN','NAMA BIDANG URUSAN','KODE PROGRAM','NAMA PROGRAM','KODE KEGIATAN','NAMA KEGIATAN','KODE SUB KEGIATAN','NAMA SUB KEGIATAN','KODE AKUN','NAMA AKUN','NILAI']
 REAL=['Kode Bidang Urusan','Kode Program','Kode Kegiatan','Kode Sub Kegiatan','Kode Rekening','Nilai Realisasi']
@@ -11,12 +11,13 @@ def cents(value):
     if isinstance(value,bool) or value is None:raise ValueError('Nominal kosong atau tidak valid.')
     raw=str(value).strip()
     if ',' in raw:
-        if not re.fullmatch(r'-?(?:\d+|\d{1,3}(?:\.\d{3})+),\d{1,2}',raw):raise ValueError('Gunakan nominal angka atau format Indonesia.')
+        if not re.fullmatch(r'-?(?:\d+|\d{1,3}(?:\.\d{3})+),\d+',raw):raise ValueError('Gunakan nominal angka atau format Indonesia.')
         raw=raw.replace('.','').replace(',','.')
     try:n=Decimal(raw)
     except InvalidOperation:raise ValueError('Nominal tidak valid.')
-    if not n.is_finite() or abs(n)>Decimal('90071992547409.91') or n*100!=(n*100).to_integral_value():raise ValueError('Nominal maksimal dua desimal dan di luar batas angka tidak diterima.')
-    return str(int(n*100))
+    if not n.is_finite():raise ValueError('Nominal tidak valid.')
+    if abs(n)>Decimal('90071992547409.91'):raise ValueError('Nominal melebihi batas presisi ekspor Excel.')
+    return str(int(n.quantize(Decimal('0.01'),rounding=ROUND_HALF_UP)*100))
 
 def validate(payload,kind,pagu):
     headers=PAGU if kind=='pagu' else REAL
@@ -60,21 +61,15 @@ def register_realisasi(app,db,admin_only):
         if request.method=='POST':
             try:
                 kind=request.form.get('kind')
-                if kind not in ('pagu','realisasi','identity'):raise ValueError('Jenis perubahan tidak valid.')
+                if kind not in ('pagu','realisasi'):raise ValueError('Jenis perubahan tidak valid.')
                 payload=json.loads(request.form.get('data',''))
                 version=int(request.form.get('version','0'))
                 with db() as c:
                     c.execute('BEGIN IMMEDIATE');row=c.execute('SELECT * FROM realisasi_dashboard WHERE id=1').fetchone()
                     if row['version']!=version:return {'error':'Data telah berubah. Muat ulang halaman sebelum mengunggah kembali.'},409
                     data=json.loads(row['payload'])
-                    if kind=='identity':
-                        if not isinstance(payload,dict):raise ValueError('Identitas tidak valid.')
-                        name=str(payload.get('name','')).strip();code=str(payload.get('code','')).strip()
-                        if not name or len(name)>240 or not re.fullmatch(r'\d+(?:\.\d+)*',code) or len(code)>100:raise ValueError('Isi nama dan kode dinas yang valid.')
-                        data.update(name=name,code=code)
-                    else:
-                        data[kind]=validate(payload,kind,data['pagu']);data[kind+'_updated']=int(time.time())
-                        if kind=='pagu':data['realisasi']=[];data['realisasi_updated']=None
+                    data[kind]=validate(payload,kind,data['pagu']);data[kind+'_updated']=int(time.time())
+                    if kind=='pagu':data['realisasi']=[];data['realisasi_updated']=None
                     c.execute('UPDATE realisasi_dashboard SET version=version+1,payload=? WHERE id=1',(json.dumps(data,ensure_ascii=False,separators=(',',':')),))
                 return {'ok':True}
             except (ValueError,TypeError,OverflowError) as error:return {'error':str(error)},400

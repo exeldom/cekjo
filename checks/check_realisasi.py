@@ -6,7 +6,11 @@ with tempfile.TemporaryDirectory() as tmp:
     os.environ['DATA_DIR']=tmp
     from app import app
     app.config['TESTING']=True
-    from realisasi import PAGU,REAL,validate
+    from realisasi import PAGU,REAL,validate,cents
+    assert cents('800000.255')=='80000026'
+    assert cents('800.000,255')=='80000026'
+    assert cents(27769428.000000004)=='2776942800'
+    assert cents('-1.235')=='-124'
     admin=app.test_client();guest=app.test_client()
     assert guest.get('/admin/dashboard-realisasi').status_code==302
     assert guest.get('/admin/dashboard-realisasi/data').status_code==302
