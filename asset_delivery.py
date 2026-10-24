@@ -23,7 +23,7 @@ def worker_package():
     versions=asset_versions()
     # Cache essentials only. Receipt fonts and page-specific extras load on demand.
     names=[name for name in versions if not name.startswith(('receipt/','merge-excel/','chat/','realisasi/')) and name not in ('sharing.js','sharing.css','share-view.js','share-view.css')]
-    shell=['/offline','/offline/kalkulator-pajak']
+    shell=['/offline']
     digest=hashlib.sha256()
     for p in sorted((ROOT/'templates').glob('*')):
         if p.is_file():digest.update(p.name.encode()+p.read_bytes())

@@ -3,7 +3,7 @@
 {% block content %}
 <link rel="stylesheet" href="{{ asset_url('tax.css') }}">
 <section class="tax-page">
-  <a class="button icon-button" href="{{ '/admin' if is_admin else '/home' }}" title="Kembali" aria-label="Kembali">{{ icon('back') }}</a>
+  <a class="button icon-button" href="/admin" title="Kembali" aria-label="Kembali">{{ icon('back') }}</a>
   <div class="page-heading"><h1>Kalkulator Pajak Sederhana <span>PMK 131/2024 dan PP 9/2022</span></h1></div>
   <div id="tax-grid" class="tax-grid"></div>
   <noscript>Aktifkan JavaScript untuk menggunakan kalkulator.</noscript>

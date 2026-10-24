@@ -41,6 +41,16 @@ def admin_only(fn):
     return wrapped
 
 @app.before_request
+def require_login():
+    # Shared recipient links and the empty PWA shell remain public.
+    public = {'health', 'login', 'static', 'pwa_manifest', 'pwa_worker', 'pwa_offline',
+              'public_share', 'public_share_view', 'sharing_view_status'}
+    if request.endpoint not in public and not session.get('admin'):
+        if request.path.startswith('/api/'):
+            return {'error': 'Silakan login.'}, 401, {'Cache-Control': 'no-store'}
+        return redirect('/login')
+
+@app.before_request
 def csrf_check():
     if request.path in ('/offline', '/offline/kalkulator-pajak', '/sw.js', '/manifest.webmanifest') or request.path.startswith('/static/') or (request.method=='GET' and request.path.startswith('/api/offline-')):
         return
@@ -110,6 +120,10 @@ def read_upload():
     except Exception: raise ValueError('File XLSX tidak dapat dibaca. Simpan ulang melalui Excel.')
 
 # Offline documents contain no authenticated state or table data.
+@app.get('/healthz')
+def health():
+    return 'ok', 200, {'Cache-Control': 'no-store'}
+
 @app.get('/manifest.webmanifest')
 def pwa_manifest():
     response = send_file(ROOT / 'static/manifest.webmanifest', mimetype='application/manifest+json')
@@ -122,7 +136,7 @@ def pwa_offline():
 
 @app.get('/offline/kalkulator-pajak')
 def pwa_offline_tax():
-    return render_template('tax.html', page='home', is_admin=False, csrf='', offline_mode=True)
+    return redirect('/kalkulator-pajak')
 
 @app.get('/sw.js')
 def pwa_worker():
@@ -143,7 +157,7 @@ def private_document_cache(response):
     return response
 
 @app.route('/')
-def root(): return redirect('/admin' if session.get('admin') else '/home')
+def root(): return redirect('/admin' if session.get('admin') else '/login')
 
 @app.get('/kalkulator-pajak')
 def tax_calculator():
@@ -152,11 +166,11 @@ def tax_calculator():
 @app.route('/home')
 @app.route('/admin')
 def home():
-    if request.path == '/admin' and not session.get('admin'): return redirect('/login')
-    public = request.path == '/home'
+    if not session.get('admin'): return redirect('/login')
+    if request.path == '/home': return redirect('/admin')
     with db() as c:
-        tables = c.execute('SELECT id,name,locked,updated FROM tables ' + ('WHERE locked=0 ' if public else '') + 'ORDER BY updated DESC').fetchall()
-    return render_template('home.html', tables=tables, public=public, page='home')
+        tables = c.execute('SELECT id,name,locked,updated FROM tables ORDER BY updated DESC').fetchall()
+    return render_template('home.html', tables=tables, public=False, page='home')
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -170,7 +184,7 @@ def login():
     return render_template('login.html', page='login')
 
 @app.post('/logout')
-def logout(): session.clear(); return redirect('/home')
+def logout(): session.clear(); return redirect('/login')
 
 @app.get('/admin/gabung-excel')
 @admin_only

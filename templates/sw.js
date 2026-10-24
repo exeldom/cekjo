@@ -10,12 +10,13 @@ self.addEventListener('install',event=>event.waitUntil((async()=>{
     if(!response.ok||response.type==='opaque')throw new Error('Asset unavailable');
     await assets.put(url,response);
   }
-  // These two safe, session-free documents change with the application version.
+  // The offline document contains no session state or application data.
   const shell=await caches.open(CACHE);
   await shell.addAll(SHELL.map(url=>new Request(url,{credentials:'omit',cache:'reload'})));
+  await self.skipWaiting();
 })()));
 self.addEventListener('activate',event=>event.waitUntil((async()=>{
-  const keep=new Set([CACHE,STATIC,'cekjo-data-v1','cekjo-data-v2']);
+  const keep=new Set([CACHE,STATIC]);
   await Promise.all((await caches.keys()).filter(key=>key.startsWith('cekjo-')&&!keep.has(key)).map(key=>caches.delete(key)));
   // Old immutable assets may still belong to an open tab. Prune only with no other tab.
   const tabs=await self.clients.matchAll({type:'window',includeUncontrolled:true});
@@ -38,7 +39,7 @@ self.addEventListener('fetch',event=>{
   if(request.mode==='navigate')event.respondWith((async()=>{
     const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),8000);
     try{return await fetch(request,{cache:'no-store',signal:controller.signal});}
-    catch{const cache=await caches.open(CACHE);return await cache.match(['/kalkulator-pajak','/offline/kalkulator-pajak'].includes(url.pathname)?'/offline/kalkulator-pajak':'/offline');}
+    catch{const cache=await caches.open(CACHE);return await cache.match('/offline');}
     finally{clearTimeout(timer);}
   })());
 });

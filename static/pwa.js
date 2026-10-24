@@ -6,6 +6,9 @@
   const standalone=()=>matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
   let promptEvent, registration;
   const updateConnection=()=> {
+    const locked = !navigator.onLine && !document.body.hasAttribute('data-offline-shell');
+    document.body.classList.toggle('connection-required', locked);
+    offline.textContent = locked ? 'Sambungkan internet untuk membuka aplikasi.' : 'Offline';
     offline.hidden=navigator.onLine && !document.body.hasAttribute('data-offline-shell');
     document.querySelectorAll('form').forEach(form=>{
       if(form.method.toLowerCase()!=='post')return;
@@ -16,7 +19,13 @@
       });
     });
   };
-  updateConnection();window.addEventListener('online',updateConnection);window.addEventListener('offline',updateConnection);
+  updateConnection();
+  window.addEventListener('online', () => {
+    if (document.body.hasAttribute('data-offline-shell')) {
+      location.replace(location.pathname.startsWith('/offline') ? '/' : location.href);
+    } else location.reload();
+  });
+  window.addEventListener('offline',updateConnection);
   if(install)install.hidden=false;
 
   window.addEventListener('beforeinstallprompt',event=>{event.preventDefault();promptEvent=event;});
@@ -41,9 +50,8 @@
         worker?.addEventListener('statechange',()=>{if(worker.state==='installed'&&navigator.serviceWorker.controller)update.hidden=false;});
       });
     }).catch(()=>{/* Online features remain available if installation is unavailable. */});
-    let updating=false;
-    update.addEventListener('click',()=>{if(registration?.waiting){updating=true;registration.waiting.postMessage('ACTIVATE_UPDATE');}});
-    navigator.serviceWorker.addEventListener('controllerchange',()=>{if(updating)location.reload();});
+    update.addEventListener('click',()=>{if(registration?.waiting){registration.waiting.postMessage('ACTIVATE_UPDATE');}});
+    navigator.serviceWorker.addEventListener('controllerchange',()=>location.reload());
   }
   // Avoid restoring an old authenticated document from the back/forward cache.
   window.addEventListener('pageshow',event=>{if(event.persisted && !document.body.hasAttribute('data-offline-shell'))location.reload();});
